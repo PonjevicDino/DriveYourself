@@ -447,9 +447,6 @@ PrefabInstance:
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: 8573549319431884787, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1823688467}
-    - targetCorrespondingSourceObject: {fileID: 8573549319431884787, guid: f5b24270dd3a52e4180206467601e919, type: 3}
-      insertIndex: -1
       addedObject: {fileID: 2105511756}
     - targetCorrespondingSourceObject: {fileID: 8573549319431884787, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       insertIndex: -1
@@ -786,6 +783,7 @@ GameObject:
   - component: {fileID: 200363787}
   - component: {fileID: 200363790}
   - component: {fileID: 200363789}
+  - component: {fileID: 200363791}
   m_Layer: 0
   m_Name: Controller
   m_TagString: Untagged
@@ -802,7 +800,7 @@ Transform:
   m_GameObject: {fileID: 200363779}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 29.87765, y: 42.22765, z: 5.2506227}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -821,7 +819,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_BrainParameters:
-    VectorObservationSize: 11
+    VectorObservationSize: 8
     NumStackedVectorObservations: 1
     m_ActionSpec:
       m_NumContinuousActions: 2
@@ -832,7 +830,7 @@ MonoBehaviour:
     hasUpgradedBrainParametersWithActionSpec: 1
   m_Model: {fileID: 0}
   m_InferenceDevice: 0
-  m_BehaviorType: 1
+  m_BehaviorType: 0
   m_BehaviorName: TestModel
   TeamId: 0
   m_UseChildSensors: 1
@@ -855,18 +853,18 @@ MonoBehaviour:
     maxStep: 0
   hasUpgradedFromAgentParameters: 1
   MaxStep: 0
-  lookAheadSegments: 3
-  significantMovementThreshold: 20
+  lookAheadSegments: 0
+  significantMovementThreshold: 0
   agentAccText: {fileID: 560227466}
   agentBrkText: {fileID: 522200965}
   agentStrText: {fileID: 1021866579}
   targetSpeed: 50
-  speedRewardPercent: 50
-  maxAllowedSafeAcc: 10
-  maxAllowedRewardAcc: 10
+  speedRewardPercent: 60
+  maxAllowedSafeAcc: 4
+  maxAllowedRewardAcc: 4
   accRewardPercent: 10
-  maxAllowedRewardDtc: 5
-  DtCRewardPercent: 40
+  maxAllowedRewardDtc: 3
+  DtCRewardPercent: 30
   endEpisodeCarYPosition: -2
   endEpisodeCarStuckSeconds: 15
 --- !u!114 &200363788
@@ -895,7 +893,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   roadSegments: []
   autoAddRoadComponent: {fileID: 1129676852}
-  reachThreshold: 7.5
+  reachThreshold: 5
 --- !u!114 &200363790
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -911,6 +909,22 @@ MonoBehaviour:
   DecisionPeriod: 5
   DecisionStep: 0
   TakeActionsBetweenDecisions: 1
+--- !u!114 &200363791
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 200363779}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88b6042bc9a5d4aa58d931eae49442e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  agentParameters:
+    maxStep: 0
+  hasUpgradedFromAgentParameters: 1
+  MaxStep: 0
 --- !u!1001 &359858341
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1530,7 +1544,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &597694823
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2177,7 +2191,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2f30602038963442b284fb2050dbf26, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  agents: 1
+  agents: 18
 --- !u!1001 &958148086
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3676,11 +3690,11 @@ Camera:
     y: 0
     width: 1
     height: 1
-  near clip plane: 0.3
+  near clip plane: 100
   far clip plane: 1000
   field of view: 60.000004
-  orthographic: 0
-  orthographic size: 5
+  orthographic: 1
+  orthographic size: 100
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -3691,7 +3705,7 @@ Camera:
   m_TargetEye: 3
   m_HDR: 0
   m_AllowMSAA: 0
-  m_AllowDynamicResolution: 0
+  m_AllowDynamicResolution: 1
   m_ForceIntoRT: 0
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
@@ -3704,13 +3718,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1823688464}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -0.07189417, y: 1.83, z: -6.893029}
+  m_LocalRotation: {x: 0.5, y: -0.5, z: 0.5, w: 0.5}
+  m_LocalPosition: {x: 87.8, y: 172.3, z: 80.539536}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1462621121}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 90}
 --- !u!114 &1823688468
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3728,11 +3742,11 @@ MonoBehaviour:
   clearDepth: 1
   volumeLayerMask:
     serializedVersion: 2
-    m_Bits: 1
+    m_Bits: 0
   volumeAnchorOverride: {fileID: 0}
-  antialiasing: 2
+  antialiasing: 0
   SMAAQuality: 2
-  dithering: 1
+  dithering: 0
   stopNaNs: 0
   taaSharpenStrength: 0.5
   TAAQuality: 1
@@ -3756,7 +3770,7 @@ MonoBehaviour:
   flipYMode: 0
   xrRendering: 1
   fullscreenPassthrough: 0
-  allowDynamicResolution: 0
+  allowDynamicResolution: 1
   customRenderingSettings: 0
   invertFaceCulling: 0
   probeLayerMask:
@@ -4931,6 +4945,7 @@ SceneRoots:
   - {fileID: 1129676852}
   - {fileID: 2013410475}
   - {fileID: 775096526}
+  - {fileID: 1823688467}
   - {fileID: 914663826}
   - {fileID: 597694826}
   - {fileID: 1954153214}
