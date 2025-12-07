@@ -2,24 +2,28 @@ behaviors:
   TestModel:
     trainer_type: ppo
     hyperparameters:
-      batch_size: 512
-      buffer_size: 2048
+      batch_size: 1024
+      buffer_size: 4096
       learning_rate: 0.00003
-      beta: 0.025
+      beta: 0.03
       epsilon: 0.2
+      epsilon_schedule: linear   
       lambd: 0.95
-      num_epoch: 5
+      num_epoch: 4
       learning_rate_schedule: linear
+      beta_schedule: linear
     network_settings:
       normalize: true
-      hidden_units: 64
-      num_layers: 2048
+      hidden_units: 128
+      num_layers: 4
       vis_encode_type: simple
+      use_recurrent: false
+      sequence_length: 16 
     reward_signals:
       extrinsic:
         gamma: 0.9
         strength: 1.0
-    keep_checkpoints: 5
     max_steps: 1000000000
-    time_horizon: 64
-    summary_freq: 50000
+    time_horizon: 4096
+    summary_freq: 10000
+    threaded: true

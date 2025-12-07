@@ -1,3 +1,5 @@
+using Assets.Scripts.Components;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class MultiAgentTraining : MonoBehaviour
@@ -11,7 +13,8 @@ public class MultiAgentTraining : MonoBehaviour
 
         for (int agent = 1; agent < agents; agent++)
         {
-            GameObject.Instantiate(transform.GetChild(0), origPosition, origRotation, transform);
+            Transform newAgent = GameObject.Instantiate(transform.GetChild(0), origPosition, origRotation, transform);
+            newAgent.Find("Controller").GetComponent<RoadLayout>().roadSegments = new List<RoadSegment>();
             //transform.GetChild(agent).Find("MainCamera").gameObject.SetActive(false);
         }
     }
