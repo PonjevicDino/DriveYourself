@@ -819,7 +819,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_BrainParameters:
-    VectorObservationSize: 8
+    VectorObservationSize: 11
     NumStackedVectorObservations: 1
     m_ActionSpec:
       m_NumContinuousActions: 2
@@ -853,8 +853,7 @@ MonoBehaviour:
     maxStep: 0
   hasUpgradedFromAgentParameters: 1
   MaxStep: 0
-  lookAheadSegments: 0
-  significantMovementThreshold: 0
+  lookAheadSegments: 3
   agentAccText: {fileID: 560227466}
   agentBrkText: {fileID: 522200965}
   agentStrText: {fileID: 1021866579}
@@ -893,7 +892,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   roadSegments: []
   autoAddRoadComponent: {fileID: 1129676852}
-  reachThreshold: 5
+  reachThreshold: 7.5
 --- !u!114 &200363790
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2191,7 +2190,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2f30602038963442b284fb2050dbf26, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  agents: 18
+  agents: 32
 --- !u!1001 &958148086
 PrefabInstance:
   m_ObjectHideFlags: 0

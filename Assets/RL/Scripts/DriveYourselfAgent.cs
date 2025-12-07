@@ -11,7 +11,6 @@ public class DriveYourselfAgent : Agent
     private RCC_CarControllerV4 carController;
 
     [SerializeField] private int lookAheadSegments;
-    [SerializeField, Min(0.01f)] private float significantMovementThreshold;
 
     [SerializeField] private TextMeshProUGUI agentAccText;
     [SerializeField] private TextMeshProUGUI agentBrkText;
@@ -220,13 +219,13 @@ public class DriveYourselfAgent : Agent
         {
             timeAtLastSignificantMove = DateTime.Now;
             EndEpisode();
-            Debug.LogWarning("Episode end: Car stuck (or agent didn't move)!");
+            //Debug.LogWarning("Episode end: Car stuck (or agent didn't move)!");
         }
 
         if (carController.transform.position.y < endEpisodeCarYPosition)
         {
             EndEpisode();
-            Debug.LogWarning("Episode end: Car out of Map!");
+            //Debug.LogWarning("Episode end: Car out of Map!");
         }
     }
 }

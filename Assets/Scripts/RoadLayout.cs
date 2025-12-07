@@ -19,7 +19,7 @@ public class RoadLayout : MonoBehaviour
 
     void Start()
     {
-        carController = GameObject.FindFirstObjectByType<RCC_CarControllerV4>();
+        carController = this.transform.parent.GetComponent<RCC_CarControllerV4>();
         if (autoAddRoadComponent != null)
         {
             for (int child = 0; child < autoAddRoadComponent.childCount; child++)
