@@ -14,8 +14,8 @@ public class MultiAgentTraining : MonoBehaviour
         for (int agent = 1; agent < agents; agent++)
         {
             Transform newAgent = GameObject.Instantiate(transform.GetChild(0), origPosition, origRotation, transform);
+            newAgent.gameObject.name = newAgent.gameObject.name + "_" + agent;
             newAgent.Find("Controller").GetComponent<RoadLayout>().roadSegments = new List<RoadSegment>();
-            //transform.GetChild(agent).Find("MainCamera").gameObject.SetActive(false);
         }
     }
 }

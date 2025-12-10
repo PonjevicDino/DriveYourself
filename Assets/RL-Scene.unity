@@ -221,12 +221,24 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8573549318274349122, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: drawSkid
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 8573549318363046129, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549318809938867, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549318991469429, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: drawSkid
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884784, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: m_IsKinematic
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
@@ -303,6 +315,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: interiorLightsOn
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: useCollisionAudio
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
@@ -437,8 +453,16 @@ PrefabInstance:
       propertyPath: m_Name
       value: M3_E46_New
       objectReference: {fileID: 0}
+    - target: {fileID: 8573549319482302257, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: drawSkid
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 8573549319596376893, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319622601076, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: drawSkid
       value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents:
@@ -784,7 +808,7 @@ GameObject:
   - component: {fileID: 200363790}
   - component: {fileID: 200363789}
   - component: {fileID: 200363791}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Controller
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -858,14 +882,15 @@ MonoBehaviour:
   agentBrkText: {fileID: 522200965}
   agentStrText: {fileID: 1021866579}
   targetSpeed: 50
-  speedRewardPercent: 60
+  speedRewardPercent: 65
   maxAllowedSafeAcc: 4
   maxAllowedRewardAcc: 4
-  accRewardPercent: 10
+  accRewardPercent: 15
   maxAllowedRewardDtc: 3
   DtCRewardPercent: 30
   endEpisodeCarYPosition: -2
   endEpisodeCarStuckSeconds: 15
+  startingThreshold: 1
 --- !u!114 &200363788
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2190,7 +2215,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2f30602038963442b284fb2050dbf26, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  agents: 32
+  agents: 16
 --- !u!1001 &958148086
 PrefabInstance:
   m_ObjectHideFlags: 0

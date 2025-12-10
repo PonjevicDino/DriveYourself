@@ -13,6 +13,7 @@ public class GetVehicleData : MonoBehaviour
     private RoadLayout roadLayout;
 
     private float segmentProgress;
+    private int lap = 1;
 
     void Start()
     {
@@ -105,6 +106,7 @@ public class GetVehicleData : MonoBehaviour
     {
         roadLayout.CheckIfNextSegmentHasBeenReached();
         roadSegment = roadLayout.roadSegments[roadLayout.GetCurrentSegmentIndex()].gameObject;
+        lap = roadLayout.GetCurrentLap();
         return roadSegment; 
     }
 
@@ -119,12 +121,18 @@ public class GetVehicleData : MonoBehaviour
         roadSegment = roadLayout.roadSegments[0].gameObject;
         lastSpeed = GetSpeed();
         lastAcceleration = GetAccelleration();
+        lap = 1;
     }
 
     public float GetProgress()
     {
         float roadSegmentPercent = (float) roadSegment.transform.GetSiblingIndex() / (float) roadLayout.roadSegments.Count() * 100.0f;
         float accurateSegmentPercent = 1.0f / (float) roadLayout.roadSegments.Count() * segmentProgress / 10.0f * 100.0f;
-        return roadSegmentPercent + accurateSegmentPercent;
+        return Mathf.Clamp(roadSegmentPercent + accurateSegmentPercent, 0.0f, 100.0f);
+    }
+
+    public int GetLap()
+    {
+        return lap;
     }
 }

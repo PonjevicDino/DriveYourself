@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using Unity.MLAgents;
@@ -31,20 +32,23 @@ public class DriveYourselfAgent : Agent
     [Header("EndEpisodeConditions")]
     [SerializeField] private int endEpisodeCarYPosition;
     [SerializeField] private int endEpisodeCarStuckSeconds = 15;
+    [SerializeField] private float startingThreshold = 1.0f;
 
     private GetVehicleData vehicleData;
     private Rigidbody carRb;
     private Vector3 startingPosition;
     private Quaternion startingRotation;
-    private Vector2 posUpdate;
 
     private DateTime lastAgentUpdate;
     private float updateDiff = 0.0f;
 
     private DateTime timeAtLastSignificantMove = DateTime.Now;
+    private DateTime timeAtInit = DateTime.Now;
 
     private float lastLapProgress = 0.0f;
-    private float nextLapTolerancePercent = 10.0f;
+    private int lastLap = 0;
+    private float progressRewardPercent = 0.33f;
+    private bool movedFromInit = false;
 
     void Start()
     {
@@ -52,10 +56,10 @@ public class DriveYourselfAgent : Agent
 
         startingPosition = carController.transform.position;
         startingRotation = carController.transform.rotation;
-        posUpdate = new Vector2(startingPosition.x, startingPosition.y);
         carRb = carController.GetComponent<Rigidbody>();
         vehicleData = this.GetComponent<GetVehicleData>();
         lastAgentUpdate = DateTime.Now;
+        carController.canGoReverseNow = false;
     }
 
     public override void OnEpisodeBegin()
@@ -65,12 +69,33 @@ public class DriveYourselfAgent : Agent
             return;
         }
 
+        //this.transform.parent.Find("All Audio Sources").gameObject.SetActive(false);
+        this.transform.parent.Find("All Contact Particles").gameObject.SetActive(false);
+
         carController.transform.SetPositionAndRotation(startingPosition, startingRotation);
         carRb.angularVelocity = Vector3.zero;
         carRb.linearVelocity = Vector3.zero;
         carController.externalController = true;
         carController.GetComponent<RCC_LogitechSteeringWheel>().overrideFFB = true;
         vehicleData.ResetVars();
+        carController.canGoReverseNow = false;
+        carController.currentGear = 1;
+        carController.GetComponent<Rigidbody>().isKinematic = true;
+        carController.engineRunning = false;
+        carController.engineRPMRaw = 0;
+
+        movedFromInit = false;
+        lastLap = 0;
+        lastLapProgress = 0.0f;
+
+        StartCoroutine(UnfreezeMovement());
+    }
+
+    private IEnumerator UnfreezeMovement()
+    {
+        yield return new WaitForSeconds(2.5f);
+        carController.GetComponent<Rigidbody>().isKinematic = false;
+        carController.engineRunning = true;
     }
 
     public override void Heuristic(in ActionBuffers actionsOut)
@@ -82,6 +107,11 @@ public class DriveYourselfAgent : Agent
 
     public override void CollectObservations(VectorSensor sensor)
     {
+        if (!vehicleData)
+        {
+            return;
+        }
+
         sensor.AddObservation(vehicleData.GetSpeed());
         sensor.AddObservation(vehicleData.GetAccelleration());
         //sensor.AddObservation(vehicleData.GetJerk());
@@ -131,6 +161,11 @@ public class DriveYourselfAgent : Agent
 
     public override void OnActionReceived(ActionBuffers actions)
     {
+        if (!carController)
+        {
+            return;
+        }
+
         float acc = 0.0f;
         float brk = 0.0f;
 
@@ -143,7 +178,7 @@ public class DriveYourselfAgent : Agent
             brk = Mathf.Abs(actions.ContinuousActions[0]);
         }
 
-        // Move Vehicle
+        // Move
         carController.throttleInput = acc;
         carController.brakeInput = brk;
         carController.steerInput = actions.ContinuousActions[1];
@@ -156,14 +191,22 @@ public class DriveYourselfAgent : Agent
 
         // Rewards
         Vector2 carPos2D = new Vector2(carController.transform.position.x, carController.transform.position.z);
-        //bool significantMovement = Vector2.Distance(carPos2D, posUpdate) >= significantMovementThreshold ? true : false;
-        bool significantMovement = vehicleData.GetProgress() > lastLapProgress || (vehicleData.GetProgress() < lastLapProgress && lastLapProgress > (100.0f - nextLapTolerancePercent) && vehicleData.GetProgress() < nextLapTolerancePercent);
 
-        if (significantMovement)
+        if (!movedFromInit && Vector3.Distance(startingPosition, carController.transform.position) > startingThreshold)
         {
+            movedFromInit = true;
+        }
+
+        if (movedFromInit && (vehicleData.GetProgress() - lastLapProgress > progressRewardPercent || vehicleData.GetLap() > lastLap))
+        {
+            if (vehicleData.GetProgress() < 50.0f)
+            {
+                lastLap = vehicleData.GetLap();
+            }
             lastLapProgress = vehicleData.GetProgress();
 
-            posUpdate = carPos2D;
+            //Debug.Log("AGENT Lap: " + lastLap + ", Progress: " + lastLapProgress + "%");
+
             timeAtLastSignificantMove = DateTime.Now;
 
             // Speed
@@ -218,6 +261,13 @@ public class DriveYourselfAgent : Agent
         else if ((DateTime.Now - timeAtLastSignificantMove).TotalSeconds > endEpisodeCarStuckSeconds)
         {
             timeAtLastSignificantMove = DateTime.Now;
+            EndEpisode();
+            //Debug.LogWarning("Episode end: Car stuck (or agent didn't move)!");
+        }
+        
+        if (lastLap == 0 && (DateTime.Now - timeAtInit).TotalSeconds > endEpisodeCarStuckSeconds)
+        {
+            timeAtInit = DateTime.Now;
             EndEpisode();
             //Debug.LogWarning("Episode end: Car stuck (or agent didn't move)!");
         }
