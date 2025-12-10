@@ -13,6 +13,7 @@ public class RoadLayout : MonoBehaviour
     public float reachThreshold = 5f;
 
     private int currentSegmentIndex = 0;
+    private int currentLap = 1;
     private Transform nextPoint;
 
     private RCC_CarControllerV4 carController;
@@ -39,6 +40,10 @@ public class RoadLayout : MonoBehaviour
         float threshHoldMult = Mathf.Clamp(carController.speed / 100, 1, 9);
         if (distance < reachThreshold * threshHoldMult)
         {
+            if (currentSegmentIndex == roadSegments.Count - 1)
+            {
+                currentLap += 1;
+            }
             currentSegmentIndex = (currentSegmentIndex + 1) % roadSegments.Count;
             nextPoint = roadSegments[currentSegmentIndex].BeginPoint;
         }
@@ -52,6 +57,11 @@ public class RoadLayout : MonoBehaviour
             currentSegmentIndexAdapted = roadSegments.Count - 1; 
         }
         return currentSegmentIndexAdapted;
+    }
+
+    public int GetCurrentLap()
+    {
+        return currentLap; 
     }
 
     public void ResetProgress()
