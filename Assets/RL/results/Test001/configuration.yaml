@@ -40,15 +40,15 @@ behaviors:
     even_checkpoints: false
     max_steps: 1000000000
     time_horizon: 4096
-    summary_freq: 100000
+    summary_freq: 5000
     threaded: true
     self_play: null
     behavioral_cloning: null
 env_settings:
-  env_path: null
+  env_path: C:\Users\phili\Desktop\DriveYourself\DrivingStyleRLConfig.exe
   env_args: null
   base_port: 5005
-  num_envs: 1
+  num_envs: 32
   num_areas: 1
   timeout_wait: 60
   seed: -1
