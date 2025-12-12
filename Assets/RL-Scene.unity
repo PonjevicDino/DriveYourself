@@ -262,6 +262,10 @@ PrefabInstance:
       value: 40
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: autoReverse
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: ABSThreshold
       value: 0.33
       objectReference: {fileID: 0}
@@ -881,13 +885,13 @@ MonoBehaviour:
   agentAccText: {fileID: 560227466}
   agentBrkText: {fileID: 522200965}
   agentStrText: {fileID: 1021866579}
-  targetSpeed: 50
+  targetSpeed: 30
   speedRewardPercent: 65
   maxAllowedSafeAcc: 4
   maxAllowedRewardAcc: 4
-  accRewardPercent: 15
+  accRewardPercent: 0
   maxAllowedRewardDtc: 3
-  DtCRewardPercent: 30
+  DtCRewardPercent: 35
   endEpisodeCarYPosition: -2
   endEpisodeCarStuckSeconds: 15
   startingThreshold: 1
@@ -2215,7 +2219,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2f30602038963442b284fb2050dbf26, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  agents: 16
+  agents: 1
 --- !u!1001 &958148086
 PrefabInstance:
   m_ObjectHideFlags: 0

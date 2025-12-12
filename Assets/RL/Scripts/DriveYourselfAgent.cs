@@ -39,15 +39,8 @@ public class DriveYourselfAgent : Agent
     private Vector3 startingPosition;
     private Quaternion startingRotation;
 
-    private DateTime lastAgentUpdate;
-    private float updateDiff = 0.0f;
-
-    private DateTime timeAtLastSignificantMove = DateTime.Now;
-    private DateTime timeAtInit = DateTime.Now;
-
     private float lastLapProgress = 0.0f;
     private int lastLap = 0;
-    private float progressRewardPercent = 0.33f;
     private bool movedFromInit = false;
 
     void Start()
@@ -58,8 +51,17 @@ public class DriveYourselfAgent : Agent
         startingRotation = carController.transform.rotation;
         carRb = carController.GetComponent<Rigidbody>();
         vehicleData = this.GetComponent<GetVehicleData>();
-        lastAgentUpdate = DateTime.Now;
         carController.canGoReverseNow = false;
+    }
+
+
+    long fixedUpdateCounter = 0L;
+    double ingameSecondsSinceStartup = 0.0d;
+    private double timeAtLastSignificantMove = 0.0d;
+    void FixedUpdate()
+    {
+        fixedUpdateCounter++;
+        ingameSecondsSinceStartup = fixedUpdateCounter * Time.fixedDeltaTime;
     }
 
     public override void OnEpisodeBegin()
@@ -73,8 +75,8 @@ public class DriveYourselfAgent : Agent
         this.transform.parent.Find("All Contact Particles").gameObject.SetActive(false);
 
         carController.transform.SetPositionAndRotation(startingPosition, startingRotation);
-        carRb.angularVelocity = Vector3.zero;
-        carRb.linearVelocity = Vector3.zero;
+        //carRb.angularVelocity = Vector3.zero;
+        //carRb.linearVelocity = Vector3.zero;
         carController.externalController = true;
         carController.GetComponent<RCC_LogitechSteeringWheel>().overrideFFB = true;
         vehicleData.ResetVars();
@@ -88,12 +90,18 @@ public class DriveYourselfAgent : Agent
         lastLap = 0;
         lastLapProgress = 0.0f;
 
+        fixedUpdateCounter = 0L;
+        timeAtLastSignificantMove = 0.0d;
+
         StartCoroutine(UnfreezeMovement());
     }
 
     private IEnumerator UnfreezeMovement()
     {
-        yield return new WaitForSeconds(2.5f);
+        while (ingameSecondsSinceStartup < 0.5)
+        {
+            yield return new WaitForFixedUpdate();
+        }
         carController.GetComponent<Rigidbody>().isKinematic = false;
         carController.engineRunning = true;
     }
@@ -116,8 +124,6 @@ public class DriveYourselfAgent : Agent
         sensor.AddObservation(vehicleData.GetAccelleration());
         //sensor.AddObservation(vehicleData.GetJerk());
         sensor.AddObservation(vehicleData.GetDtC());
-        updateDiff = (lastAgentUpdate - DateTime.Now).Milliseconds / 1000.0f;
-        lastAgentUpdate = DateTime.Now;
 
         GameObject currentSegment = vehicleData.GetRoadSegment();
         switch (currentSegment.name.Split("_")[1])
@@ -153,7 +159,8 @@ public class DriveYourselfAgent : Agent
         sensor.AddObservation(nextRoadSegments);
 
         Transform nextRoadSegment = vehicleData.GetNextRoadSegment(vehicleData.GetRoadSegment()).transform;
-        float angleToNextRoadSegment = Vector3.Angle(carController.transform.position, nextRoadSegment.transform.position);
+        Vector3 toNextRoadSegment = (nextRoadSegment.position - carController.transform.position).normalized;
+        float angleToNextRoadSegment = Vector3.SignedAngle(carController.transform.forward, toNextRoadSegment, Vector3.up);
 
         sensor.AddObservation((carController.transform.position - nextRoadSegment.position).normalized);
         sensor.AddObservation(angleToNextRoadSegment);
@@ -161,10 +168,16 @@ public class DriveYourselfAgent : Agent
 
     public override void OnActionReceived(ActionBuffers actions)
     {
+        //Debug.Log($"{GetHashCode()}: actions.ContinuousActions[0]: {actions.ContinuousActions[0]}; actions.ContinuousActions[1]: {actions.ContinuousActions[1]}; rpm: {carController.engineRPM}");
+
         if (!carController)
         {
             return;
         }
+
+        float updateDiff = Time.fixedDeltaTime;
+        float currentAccPerSecond = vehicleData.GetAccelleration() / updateDiff;
+        float currentAccOffset = Mathf.Abs(currentAccPerSecond) - maxAllowedSafeAcc;
 
         float acc = 0.0f;
         float brk = 0.0f;
@@ -176,6 +189,12 @@ public class DriveYourselfAgent : Agent
         else
         {
             brk = Mathf.Abs(actions.ContinuousActions[0]);
+        }
+
+        // Engine Inertia
+        if (carController.engineRPM > 800.0f * 1.5f)
+        {
+            AddReward(0.0001f);
         }
 
         // Move
@@ -197,7 +216,8 @@ public class DriveYourselfAgent : Agent
             movedFromInit = true;
         }
 
-        if (movedFromInit && (vehicleData.GetProgress() - lastLapProgress > progressRewardPercent || vehicleData.GetLap() > lastLap))
+        float deltaProgress = vehicleData.GetProgress() - lastLapProgress;
+        if (movedFromInit && (deltaProgress > 0.0f || vehicleData.GetLap() > lastLap))
         {
             if (vehicleData.GetProgress() < 50.0f)
             {
@@ -205,69 +225,65 @@ public class DriveYourselfAgent : Agent
             }
             lastLapProgress = vehicleData.GetProgress();
 
-            //Debug.Log("AGENT Lap: " + lastLap + ", Progress: " + lastLapProgress + "%");
-
-            timeAtLastSignificantMove = DateTime.Now;
-
-            // Speed
-            float maxRewardSpeed = targetSpeed * 2.0f;
-            float currentSpeedFactor = Mathf.InverseLerp(0.0f, maxRewardSpeed, vehicleData.GetSpeed()) * 2.0f;
-            float currentSpeedOffset = Mathf.Abs(currentSpeedFactor - 1);
-            if (carController.currentGear != -1)
+            if (lastLap > 0)
             {
-                AddReward(currentSpeedOffset * (speedRewardPercent / 100.0f));
-            }
+                //Debug.Log("AGENT Lap: " + lastLap + ", Progress: " + lastLapProgress + "%");
+                timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
-            // Acceleration
-            float currentAccPerSecond = vehicleData.GetAccelleration() / updateDiff;
-            float currentAccOffset = Mathf.Abs(currentAccPerSecond) - maxAllowedSafeAcc;
-            if (currentAccOffset <= 0)
-            {
-                AddReward(1.0f * (accRewardPercent / 100.0f));
-            }
-            else
-            {
-                float accRewardDegradeFactor = Mathf.InverseLerp(0.0f, maxAllowedRewardAcc, currentAccOffset);
-                float accReward = (1.0f - accRewardDegradeFactor) * (accRewardPercent / 100.0f);
-                if (!float.IsNaN(accReward))
+                // Progress
+                AddReward(deltaProgress);
+
+                // Speed
+                float maxRewardSpeed = targetSpeed * 2.0f;
+                float currentSpeedFactor = Mathf.InverseLerp(0.0f, maxRewardSpeed, vehicleData.GetSpeed()) * 2.0f;
+                float currentSpeedOffset = Mathf.Abs(currentSpeedFactor - 1);
+                if (carController.currentGear != -1)
                 {
-                    AddReward(accReward);
+                    AddReward(currentSpeedOffset * (speedRewardPercent / 100.0f));
                 }
-            }
 
-            // Jerk
-            /*
-            float currentJerkPerSecond = vehicleData.GetJerk() / updateDiff;
-            float currentJerkOffset = Mathf.Abs(currentJerkPerSecond) - maxAllowedSafeJerk;
-            if (currentJerkOffset <= 0)
-            {
-                AddReward(1.0f * (jerkRewardPercent / 100.0f));
-            }
-            else
-            {
-                float jerkRewardDegradeFactor = Mathf.InverseLerp(0.0f, maxAllowedRewardJerk, currentJerkOffset);
-                float jerkReward = (1.0f - jerkRewardDegradeFactor) * (accRewardPercent / 100.0f);
-                if (!float.IsNaN(jerkReward))
+                // Acceleration
+                if (currentAccOffset <= 0)
                 {
-                    AddReward(jerkReward);
+                    AddReward(1.0f * (accRewardPercent / 100.0f));
                 }
-            }
-            */
+                else
+                {
+                    float accRewardDegradeFactor = Mathf.InverseLerp(0.0f, maxAllowedRewardAcc, currentAccOffset);
+                    float accReward = (1.0f - accRewardDegradeFactor) * (accRewardPercent / 100.0f);
+                    if (!float.IsNaN(accReward))
+                    {
+                        AddReward(accReward);
+                    }
+                }
 
-            // Distance to Center
-            float DtCOffsetFactor = Mathf.Max(0.0f, (maxAllowedRewardDtc - Mathf.Abs(vehicleData.GetDtC()))) / maxAllowedRewardDtc;
-            AddReward(DtCOffsetFactor * (DtCRewardPercent / 100.0f));
+                // Jerk
+                /*
+                float currentJerkPerSecond = vehicleData.GetJerk() / updateDiff;
+                float currentJerkOffset = Mathf.Abs(currentJerkPerSecond) - maxAllowedSafeJerk;
+                if (currentJerkOffset <= 0)
+                {
+                    AddReward(1.0f * (jerkRewardPercent / 100.0f));
+                }
+                else
+                {
+                    float jerkRewardDegradeFactor = Mathf.InverseLerp(0.0f, maxAllowedRewardJerk, currentJerkOffset);
+                    float jerkReward = (1.0f - jerkRewardDegradeFactor) * (accRewardPercent / 100.0f);
+                    if (!float.IsNaN(jerkReward))
+                    {
+                        AddReward(jerkReward);
+                    }
+                }
+                */
+
+                // Distance to Center
+                float DtCOffsetFactor = Mathf.Max(0.0f, (maxAllowedRewardDtc - Mathf.Abs(vehicleData.GetDtC()))) / maxAllowedRewardDtc;
+                AddReward(DtCOffsetFactor * (DtCRewardPercent / 100.0f));
+            }
         }
-        else if ((DateTime.Now - timeAtLastSignificantMove).TotalSeconds > endEpisodeCarStuckSeconds)
+        else if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
         {
-            timeAtLastSignificantMove = DateTime.Now;
-            EndEpisode();
-            //Debug.LogWarning("Episode end: Car stuck (or agent didn't move)!");
-        }
-        
-        if (lastLap == 0 && (DateTime.Now - timeAtInit).TotalSeconds > endEpisodeCarStuckSeconds)
-        {
-            timeAtInit = DateTime.Now;
+            AddReward(-10.0f);
             EndEpisode();
             //Debug.LogWarning("Episode end: Car stuck (or agent didn't move)!");
         }
@@ -275,6 +291,7 @@ public class DriveYourselfAgent : Agent
         if (carController.transform.position.y < endEpisodeCarYPosition)
         {
             EndEpisode();
+            AddReward(-100.0f);
             //Debug.LogWarning("Episode end: Car out of Map!");
         }
     }
