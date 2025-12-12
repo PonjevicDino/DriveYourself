@@ -13,7 +13,7 @@ public class GetVehicleData : MonoBehaviour
     private RoadLayout roadLayout;
 
     private float segmentProgress;
-    private int lap = 1;
+    private int lap = 0;
 
     void Start()
     {
