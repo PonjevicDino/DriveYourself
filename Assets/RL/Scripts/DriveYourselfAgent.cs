@@ -192,7 +192,7 @@ public class DriveYourselfAgent : Agent
         }
 
         // Engine Inertia
-        if (carController.engineRPM > 800.0f * 1.5f)
+        if (carController.engineRPM > 800.0f * 2.5f)
         {
             AddReward(0.0001f);
         }
@@ -209,8 +209,7 @@ public class DriveYourselfAgent : Agent
         agentStrText.text = "Str: " + actions.ContinuousActions[1].ToString("F4");
 
         // Rewards
-        Vector2 carPos2D = new Vector2(carController.transform.position.x, carController.transform.position.z);
-
+        //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
         if (!movedFromInit && Vector3.Distance(startingPosition, carController.transform.position) > startingThreshold)
         {
             movedFromInit = true;
@@ -223,11 +222,11 @@ public class DriveYourselfAgent : Agent
             {
                 lastLap = vehicleData.GetLap();
             }
-            lastLapProgress = vehicleData.GetProgress();
+            lastLapProgress = vehicleData.GetProgress() < 99.0f ? vehicleData.GetProgress() : 0.0f;
 
             if (lastLap > 0)
             {
-                //Debug.Log("AGENT Lap: " + lastLap + ", Progress: " + lastLapProgress + "%");
+                //Debug.Log("AGENT Progress: " + lastLap + ", Progress: " + lastLapProgress + "%");
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
                 // Progress
@@ -283,16 +282,17 @@ public class DriveYourselfAgent : Agent
         }
         else if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
         {
-            AddReward(-10.0f);
+            float stuckPunishment = -10.0f + Mathf.Clamp(Vector3.Distance(carController.transform.position, startingPosition), 0.0f, startingThreshold) * 10.0f / startingThreshold;
+            AddReward(stuckPunishment);
+            //Debug.LogWarning($"Episode end: Car stuck (or agent didn't move)! Moved for: " + Vector3.Distance(carController.transform.position, startingPosition) + "m");
             EndEpisode();
-            //Debug.LogWarning("Episode end: Car stuck (or agent didn't move)!");
         }
 
         if (carController.transform.position.y < endEpisodeCarYPosition)
         {
-            EndEpisode();
-            AddReward(-100.0f);
+            AddReward(-50.0f);
             //Debug.LogWarning("Episode end: Car out of Map!");
+            EndEpisode();
         }
     }
 }

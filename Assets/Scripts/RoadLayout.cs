@@ -67,6 +67,7 @@ public class RoadLayout : MonoBehaviour
     public void ResetProgress()
     {
         currentSegmentIndex = 0;
+        currentLap = 1;
         nextPoint = roadSegments[currentSegmentIndex].BeginPoint;
     }
 }
