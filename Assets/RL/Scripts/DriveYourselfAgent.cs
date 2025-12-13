@@ -194,7 +194,7 @@ public class DriveYourselfAgent : Agent
         // Engine Inertia
         if (carController.engineRPM > 800.0f * 2.5f)
         {
-            AddReward(0.0001f);
+            AddReward(0.001f);
         }
 
         // Move
@@ -231,14 +231,16 @@ public class DriveYourselfAgent : Agent
 
                 // Progress
                 AddReward(deltaProgress);
+                //Debug.Log("Reward Progress: " + deltaProgress);
 
                 // Speed
                 float maxRewardSpeed = targetSpeed * 2.0f;
                 float currentSpeedFactor = Mathf.InverseLerp(0.0f, maxRewardSpeed, vehicleData.GetSpeed()) * 2.0f;
-                float currentSpeedOffset = Mathf.Abs(currentSpeedFactor - 1);
+                float currentSpeedOffset = 1.0f - Mathf.Abs(currentSpeedFactor - 1);
                 if (carController.currentGear != -1)
                 {
                     AddReward(currentSpeedOffset * (speedRewardPercent / 100.0f));
+                    //Debug.Log("Reward Speed: " + (currentSpeedOffset * (speedRewardPercent / 100.0f)));
                 }
 
                 // Acceleration
@@ -278,6 +280,7 @@ public class DriveYourselfAgent : Agent
                 // Distance to Center
                 float DtCOffsetFactor = Mathf.Max(0.0f, (maxAllowedRewardDtc - Mathf.Abs(vehicleData.GetDtC()))) / maxAllowedRewardDtc;
                 AddReward(DtCOffsetFactor * (DtCRewardPercent / 100.0f));
+                //Debug.Log("Reward DtC: " + (DtCOffsetFactor * (DtCRewardPercent / 100.0f)));
             }
         }
         else if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
