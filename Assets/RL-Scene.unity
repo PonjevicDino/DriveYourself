@@ -431,15 +431,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884787, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884787, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884787, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884787, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -858,7 +858,7 @@ MonoBehaviour:
     hasUpgradedBrainParametersWithActionSpec: 1
   m_Model: {fileID: 0}
   m_InferenceDevice: 0
-  m_BehaviorType: 0
+  m_BehaviorType: 1
   m_BehaviorName: TestModel
   TeamId: 0
   m_UseChildSensors: 1
@@ -895,6 +895,11 @@ MonoBehaviour:
   endEpisodeCarYPosition: -2
   endEpisodeCarStuckSeconds: 30
   startingThreshold: 2
+  startingPositionSidewaysOffset: 5
+  startingRotationForEpisode: 20
+  startingMaximumForwardSpeed: 50
+  startingMaximumSidewaysSpeed: 3
+  startingAxis: 1
 --- !u!114 &200363788
 MonoBehaviour:
   m_ObjectHideFlags: 0
