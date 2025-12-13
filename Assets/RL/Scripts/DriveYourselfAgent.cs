@@ -43,6 +43,17 @@ public class DriveYourselfAgent : Agent
     private int lastLap = 0;
     private bool movedFromInit = false;
 
+    [SerializeField, Min(0.0f)] private float startingPositionSidewaysOffset;
+    [SerializeField, Range(0.0f, 180.0f)] private float startingRotationForEpisode;
+    [SerializeField, Min(0.0f)] private float startingMaximumForwardSpeed;
+    [SerializeField, Min(0.0f)] private float startingMaximumSidewaysSpeed;
+    [SerializeField] private StartingAxis startingAxis;
+    private enum StartingAxis
+    {
+        X,
+        Z
+    }
+
     void Start()
     {
         carController = this.transform.parent.GetComponent<RCC_CarControllerV4>();
@@ -74,17 +85,29 @@ public class DriveYourselfAgent : Agent
         //this.transform.parent.Find("All Audio Sources").gameObject.SetActive(false);
         this.transform.parent.Find("All Contact Particles").gameObject.SetActive(false);
 
-        carController.transform.SetPositionAndRotation(startingPosition, startingRotation);
+        Vector3 startingPositionForEpisode = startingPosition;
+        switch (startingAxis)
+        {
+            case StartingAxis.X:
+                startingPositionForEpisode += new Vector3(UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset), 0.0f, 0.0f);
+                break;
+            case StartingAxis.Z:
+                startingPositionForEpisode += new Vector3(0.0f, 0.0f, (UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset)));
+                break;
+        }
+        carController.transform.SetPositionAndRotation(startingPositionForEpisode, startingRotation);
+        carController.transform.Rotate(new Vector3(0.0f, UnityEngine.Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0.0f));
+
         //carRb.angularVelocity = Vector3.zero;
-        //carRb.linearVelocity = Vector3.zero;
+        carRb.linearVelocity = (carController.transform.forward * UnityEngine.Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) + (carController.transform.right * UnityEngine.Random.Range(-startingMaximumSidewaysSpeed /3.6f, startingMaximumSidewaysSpeed / 3.6f));
         carController.externalController = true;
         carController.GetComponent<RCC_LogitechSteeringWheel>().overrideFFB = true;
         vehicleData.ResetVars();
         carController.canGoReverseNow = false;
         carController.currentGear = 1;
-        carController.GetComponent<Rigidbody>().isKinematic = true;
-        carController.engineRunning = false;
-        carController.engineRPMRaw = 0;
+        //carController.GetComponent<Rigidbody>().isKinematic = true;
+        //carController.engineRunning = false;
+        //carController.engineRPMRaw = 0;
 
         movedFromInit = false;
         lastLap = 0;
@@ -93,7 +116,7 @@ public class DriveYourselfAgent : Agent
         fixedUpdateCounter = 0L;
         timeAtLastSignificantMove = 0.0d;
 
-        StartCoroutine(UnfreezeMovement());
+        //StartCoroutine(UnfreezeMovement());
     }
 
     private IEnumerator UnfreezeMovement()
