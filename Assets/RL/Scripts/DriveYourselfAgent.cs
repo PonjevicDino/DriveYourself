@@ -11,6 +11,12 @@ public class DriveYourselfAgent : Agent
 {
     private RCC_CarControllerV4 carController;
 
+    private float episodeProgressReward;
+    private float episodeSpeedReward;
+    private float episodeSpeedDeviation;
+    private float episodeDtCReward;
+    private float episodeDtCDeviation;
+
     [SerializeField] private int lookAheadSegments;
 
     [SerializeField] private TextMeshProUGUI agentAccText;
@@ -77,7 +83,15 @@ public class DriveYourselfAgent : Agent
 
     public override void OnEpisodeBegin()
     {
-        if(!carController)
+        episodeProgressReward = 0.0f;
+        episodeSpeedReward = 0.0f;
+        episodeSpeedDeviation = 0.0f;
+        episodeDtCReward = 0.0f;
+        episodeDtCDeviation = 0.0f;
+
+        ForceDisableAllParticles();
+
+        if (!carController)
         {
             return;
         }
@@ -89,10 +103,10 @@ public class DriveYourselfAgent : Agent
         switch (startingAxis)
         {
             case StartingAxis.X:
-                startingPositionForEpisode += new Vector3(UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset), 0.0f, 0.0f);
+                startingPositionForEpisode += new Vector3(0.0f, 0.0f, UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset));
                 break;
             case StartingAxis.Z:
-                startingPositionForEpisode += new Vector3(0.0f, 0.0f, (UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset)));
+                startingPositionForEpisode += new Vector3(UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset), 0.0f, 0.0f);
                 break;
         }
         carController.transform.SetPositionAndRotation(startingPositionForEpisode, startingRotation);
@@ -254,6 +268,7 @@ public class DriveYourselfAgent : Agent
 
                 // Progress
                 AddReward(deltaProgress);
+                episodeProgressReward += deltaProgress;
                 //Debug.Log("Reward Progress: " + deltaProgress);
 
                 // Speed
@@ -262,9 +277,12 @@ public class DriveYourselfAgent : Agent
                 float currentSpeedOffset = 1.0f - Mathf.Abs(currentSpeedFactor - 1);
                 if (carController.currentGear != -1)
                 {
-                    AddReward(currentSpeedOffset * (speedRewardPercent / 100.0f));
-                    //Debug.Log("Reward Speed: " + (currentSpeedOffset * (speedRewardPercent / 100.0f)));
+                    float speedReward = currentSpeedOffset * (speedRewardPercent / 100.0f);
+                    AddReward(speedReward);
+                    episodeSpeedReward += speedReward;
+                    //Debug.Log("Reward Speed: " + (speedReward));
                 }
+                episodeSpeedDeviation += Mathf.Abs(targetSpeed - vehicleData.GetSpeed());
 
                 // Acceleration
                 if (currentAccOffset <= 0)
@@ -302,8 +320,11 @@ public class DriveYourselfAgent : Agent
 
                 // Distance to Center
                 float DtCOffsetFactor = Mathf.Max(0.0f, (maxAllowedRewardDtc - Mathf.Abs(vehicleData.GetDtC()))) / maxAllowedRewardDtc;
-                AddReward(DtCOffsetFactor * (DtCRewardPercent / 100.0f));
-                //Debug.Log("Reward DtC: " + (DtCOffsetFactor * (DtCRewardPercent / 100.0f)));
+                float DtCReward = DtCOffsetFactor * (DtCRewardPercent / 100.0f);
+                AddReward(DtCReward);
+                episodeDtCReward += DtCReward;
+                episodeDtCDeviation += Mathf.Abs(vehicleData.GetDtC());
+                //Debug.Log("Reward DtC: " + DtCReward);
             }
         }
         else if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
@@ -311,6 +332,7 @@ public class DriveYourselfAgent : Agent
             float stuckPunishment = -10.0f + Mathf.Clamp(Vector3.Distance(carController.transform.position, startingPosition), 0.0f, startingThreshold) * 10.0f / startingThreshold;
             AddReward(stuckPunishment);
             //Debug.LogWarning($"Episode end: Car stuck (or agent didn't move)! Moved for: " + Vector3.Distance(carController.transform.position, startingPosition) + "m");
+            InjectStats();
             EndEpisode();
         }
 
@@ -318,7 +340,41 @@ public class DriveYourselfAgent : Agent
         {
             AddReward(-50.0f);
             //Debug.LogWarning("Episode end: Car out of Map!");
+            InjectStats();
             EndEpisode();
+        }
+    }
+
+    private void InjectStats()
+    {
+        long stepCount = fixedUpdateCounter > 0 ? fixedUpdateCounter : 1;
+        float lapsCompleted = (vehicleData.GetLap() - 1) + (vehicleData.GetProgress() / 100f);
+        var stats = Academy.Instance.StatsRecorder;
+
+        stats.Add("Custom/Laps Completed", lapsCompleted, StatAggregationMethod.Average);
+        stats.Add("Custom/Total Progress Reward", episodeProgressReward, StatAggregationMethod.Average);
+        stats.Add("Custom/Total Speed Reward", episodeSpeedReward, StatAggregationMethod.Average);
+        stats.Add("Custom/Total DtC Reward", episodeDtCReward, StatAggregationMethod.Average);
+        stats.Add("Custom/Avg Speed Deviation", episodeSpeedDeviation / stepCount, StatAggregationMethod.Average);
+        stats.Add("Custom/Avg DtC Deviation", episodeDtCDeviation / stepCount, StatAggregationMethod.Average);
+    }
+
+    private void ForceDisableAllParticles()
+    {
+        ParticleSystem[] allParticles = carController.GetComponentsInChildren<ParticleSystem>(true);
+        foreach (ParticleSystem particleSystem in allParticles)
+        {
+            particleSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            particleSystem.gameObject.SetActive(false);
+        }
+
+        foreach (var wheel in carController.AllWheelColliders)
+        {
+            ParticleSystem[] wheelParticles = wheel.GetComponentsInChildren<ParticleSystem>(true);
+            foreach (ParticleSystem wheelPs in wheelParticles)
+            {
+                wheelPs.gameObject.SetActive(false);
+            }
         }
     }
 }
