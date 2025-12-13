@@ -23,7 +23,7 @@ behaviors:
       extrinsic:
         gamma: 0.9
         strength: 1.0
-    max_steps: 80000000  # 5.000.000 times Envs (16)
+    max_steps: 1280000000  # 10.000.000 times Envs (16) times Agents (8)
     time_horizon: 2024
-    summary_freq: 160000  # 10.000 times Envs (16)
+    summary_freq: 125000  # ~ 10.000 times Envs (16) times Agents (8)
     threaded: true
