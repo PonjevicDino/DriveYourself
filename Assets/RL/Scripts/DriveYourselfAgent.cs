@@ -26,9 +26,9 @@ public class DriveYourselfAgent : Agent
     [Header("Rewards")]
     [SerializeField, Min(0f)] private float targetSpeed;
     [SerializeField, Range(0.0f,100.0f)] private float speedRewardPercent;
-    [SerializeField, Min(0f)] private float maxAllowedSafeAcc;
-    [SerializeField, Min(0f)] private float maxAllowedRewardAcc;
-    [SerializeField, Range(0.0f,100.0f)] private float accRewardPercent;
+    //[SerializeField, Min(0f)] private float maxAllowedSafeAcc;
+    //[SerializeField, Min(0f)] private float maxAllowedRewardAcc;
+    //[SerializeField, Range(0.0f,100.0f)] private float accRewardPercent;
     //[SerializeField, Min(0f)] private float maxAllowedSafeJerk;
     //[SerializeField, Min(0f)] private float maxAllowedRewardJerk;
     //[SerializeField, Range(0.0f,100.0f)] private float jerkRewardPercent;
@@ -36,13 +36,15 @@ public class DriveYourselfAgent : Agent
     [SerializeField, Range(0.0f,100.0f)] private float DtCRewardPercent;
 
     [Header("EndEpisodeConditions")]
-    [SerializeField] private int endEpisodeCarYPosition;
+    [SerializeField, Min(1)] private int endEpisodeAfterCompletedLaps = 1;
+    [SerializeField] private int endEpisodeCarYPosition = -2;
     [SerializeField] private int endEpisodeCarStuckSeconds = 15;
     [SerializeField] private float startingThreshold = 1.0f;
 
     private GetVehicleData vehicleData;
     private Rigidbody carRb;
     private Vector3 startingPosition;
+    private Vector3 startingPositionForEpisode;
     private Quaternion startingRotation;
 
     private float lastLapProgress = 0.0f;
@@ -64,7 +66,7 @@ public class DriveYourselfAgent : Agent
     {
         carController = this.transform.parent.GetComponent<RCC_CarControllerV4>();
 
-        startingPosition = carController.transform.position;
+        startingPosition = startingPositionForEpisode = carController.transform.position;
         startingRotation = carController.transform.rotation;
         carRb = carController.GetComponent<Rigidbody>();
         vehicleData = this.GetComponent<GetVehicleData>();
@@ -83,6 +85,10 @@ public class DriveYourselfAgent : Agent
 
     public override void OnEpisodeBegin()
     {
+        targetSpeed = Academy.Instance.EnvironmentParameters.GetWithDefault("target_speed", 50.0f);
+        DtCRewardPercent = Academy.Instance.EnvironmentParameters.GetWithDefault("dtc_weight", 0.33f) * 100f;
+        speedRewardPercent = 100f - DtCRewardPercent;
+
         episodeProgressReward = 0.0f;
         episodeSpeedReward = 0.0f;
         episodeSpeedDeviation = 0.0f;
@@ -99,7 +105,7 @@ public class DriveYourselfAgent : Agent
         //this.transform.parent.Find("All Audio Sources").gameObject.SetActive(false);
         this.transform.parent.Find("All Contact Particles").gameObject.SetActive(false);
 
-        Vector3 startingPositionForEpisode = startingPosition;
+        startingPositionForEpisode = startingPosition;
         switch (startingAxis)
         {
             case StartingAxis.X:
@@ -156,6 +162,9 @@ public class DriveYourselfAgent : Agent
         {
             return;
         }
+
+        sensor.AddObservation(targetSpeed / 150f); // 150 as the maximum Speed
+        sensor.AddObservation(DtCRewardPercent / 100f);
 
         sensor.AddObservation(vehicleData.GetSpeed());
         sensor.AddObservation(vehicleData.GetAccelleration());
@@ -214,7 +223,7 @@ public class DriveYourselfAgent : Agent
 
         float updateDiff = Time.fixedDeltaTime;
         float currentAccPerSecond = vehicleData.GetAccelleration() / updateDiff;
-        float currentAccOffset = Mathf.Abs(currentAccPerSecond) - maxAllowedSafeAcc;
+        //float currentAccOffset = Mathf.Abs(currentAccPerSecond) - maxAllowedSafeAcc;
 
         float acc = 0.0f;
         float brk = 0.0f;
@@ -247,21 +256,27 @@ public class DriveYourselfAgent : Agent
 
         // Rewards
         //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
-        if (!movedFromInit && Vector3.Distance(startingPosition, carController.transform.position) > startingThreshold)
+        if (!movedFromInit && Vector3.Distance(startingPositionForEpisode, carController.transform.position) > startingThreshold)
         {
             movedFromInit = true;
         }
 
-        float deltaProgress = vehicleData.GetProgress() - lastLapProgress;
-        if (movedFromInit && (deltaProgress > 0.0f || vehicleData.GetLap() > lastLap))
+        float currentProgress = vehicleData.GetProgress();
+        float deltaProgress = Mathf.Max(0.0f, currentProgress - lastLapProgress);
+        if (movedFromInit && (deltaProgress > 0.0f || (vehicleData.GetLap() > lastLap && currentProgress < 50.0f)))
         {
-            if (vehicleData.GetProgress() < 50.0f)
+            if (currentProgress < 50.0f)
             {
                 lastLap = vehicleData.GetLap();
             }
-            lastLapProgress = vehicleData.GetProgress() < 99.0f ? vehicleData.GetProgress() : 0.0f;
+            lastLapProgress = currentProgress;
 
-            if (lastLap > 0)
+            if (lastLap > endEpisodeAfterCompletedLaps)
+            {
+                InjectStats();
+                EndEpisode();
+            }
+            else if (lastLap > 0)
             {
                 //Debug.Log("AGENT Progress: " + lastLap + ", Progress: " + lastLapProgress + "%");
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
@@ -272,12 +287,12 @@ public class DriveYourselfAgent : Agent
                 //Debug.Log("Reward Progress: " + deltaProgress);
 
                 // Speed
-                float maxRewardSpeed = targetSpeed * 2.0f;
-                float currentSpeedFactor = Mathf.InverseLerp(0.0f, maxRewardSpeed, vehicleData.GetSpeed()) * 2.0f;
-                float currentSpeedOffset = 1.0f - Mathf.Abs(currentSpeedFactor - 1);
+                float speedSigma = targetSpeed / 3.0f;
+                float speedDifference = vehicleData.GetSpeed() - targetSpeed;
+                float bellCurveSpeed = Mathf.Exp(-(speedDifference * speedDifference) / (2 * speedSigma * speedSigma));
                 if (carController.currentGear != -1)
                 {
-                    float speedReward = currentSpeedOffset * (speedRewardPercent / 100.0f);
+                    float speedReward = bellCurveSpeed * (speedRewardPercent / 100.0f);
                     AddReward(speedReward);
                     episodeSpeedReward += speedReward;
                     //Debug.Log("Reward Speed: " + (speedReward));
@@ -285,6 +300,7 @@ public class DriveYourselfAgent : Agent
                 episodeSpeedDeviation += Mathf.Abs(targetSpeed - vehicleData.GetSpeed());
 
                 // Acceleration
+                /*
                 if (currentAccOffset <= 0)
                 {
                     AddReward(1.0f * (accRewardPercent / 100.0f));
@@ -298,6 +314,7 @@ public class DriveYourselfAgent : Agent
                         AddReward(accReward);
                     }
                 }
+                */
 
                 // Jerk
                 /*
@@ -319,11 +336,13 @@ public class DriveYourselfAgent : Agent
                 */
 
                 // Distance to Center
-                float DtCOffsetFactor = Mathf.Max(0.0f, (maxAllowedRewardDtc - Mathf.Abs(vehicleData.GetDtC()))) / maxAllowedRewardDtc;
-                float DtCReward = DtCOffsetFactor * (DtCRewardPercent / 100.0f);
+                float dtcSigma = maxAllowedRewardDtc / 3.0f;
+                float currentDtC = vehicleData.ReturnLastDtC();
+                float bellCurveDtC = Mathf.Exp(-(currentDtC * currentDtC) / (2 * dtcSigma * dtcSigma));
+                float DtCReward = bellCurveDtC * (DtCRewardPercent / 100.0f);
                 AddReward(DtCReward);
                 episodeDtCReward += DtCReward;
-                episodeDtCDeviation += Mathf.Abs(vehicleData.GetDtC());
+                episodeDtCDeviation += Mathf.Abs(vehicleData.ReturnLastDtC());
                 //Debug.Log("Reward DtC: " + DtCReward);
             }
         }
@@ -334,6 +353,7 @@ public class DriveYourselfAgent : Agent
             //Debug.LogWarning($"Episode end: Car stuck (or agent didn't move)! Moved for: " + Vector3.Distance(carController.transform.position, startingPosition) + "m");
             InjectStats();
             EndEpisode();
+            return;
         }
 
         if (carController.transform.position.y < endEpisodeCarYPosition)
@@ -342,11 +362,17 @@ public class DriveYourselfAgent : Agent
             //Debug.LogWarning("Episode end: Car out of Map!");
             InjectStats();
             EndEpisode();
+            return;
         }
     }
 
     private void InjectStats()
     {
+        if (float.IsNaN(episodeSpeedDeviation) || float.IsNaN(episodeDtCDeviation))
+        {
+            return;
+        }
+
         long stepCount = fixedUpdateCounter > 0 ? fixedUpdateCounter : 1;
         float lapsCompleted = (vehicleData.GetLap() - 1) + (vehicleData.GetProgress() / 100f);
         var stats = Academy.Instance.StatsRecorder;

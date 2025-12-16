@@ -23,12 +23,20 @@ public class GetVehicleData : MonoBehaviour
 
     public float GetSpeed()
     {
+        if (!carController)
+        {
+            return 0.0f;
+        }
         return carController.speed;
     }
 
     private float lastSpeed = 0.0f;
     public float GetAccelleration()
     {
+        if (!carController)
+        {
+            return 0.0f;
+        }
         return carController.speed - lastSpeed;
     }
 
@@ -101,6 +109,10 @@ public class GetVehicleData : MonoBehaviour
 
         return dtc;
     }
+    public float ReturnLastDtC()
+    {
+        return lastDtc;
+    }
 
     public GameObject GetRoadSegment()
     {
@@ -117,6 +129,10 @@ public class GetVehicleData : MonoBehaviour
 
     public void ResetVars()
     {
+        if (!roadLayout)
+        {
+            return;
+        }
         roadLayout.ResetProgress();
         roadSegment = roadLayout.roadSegments[0].gameObject;
         lastSpeed = GetSpeed();

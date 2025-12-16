@@ -6,7 +6,7 @@ public class MultiAgentTraining : MonoBehaviour
 {
     [SerializeField] private int agents = 1;
 
-    void Start()
+    void Awake()
     {
         Vector3 origPosition = transform.GetChild(0).position;
         Quaternion origRotation = transform.GetChild(0).rotation;
