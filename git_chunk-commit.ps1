@@ -12,24 +12,30 @@ param (
 )
 
 # --- CONFIGURATION ---
-$ChunkSizeLimit = 1GB       # Target size for each commit batch
-$MaxFileSize    = 100MB     # SKIP any single file larger than this (assume it goes to LFS)
+$ChunkSizeLimit = 1GB
+$MaxFileSize    = 100MB     # Skip files larger than this
 $RemoteName     = "origin"
 # ---------------------
 
 $ErrorActionPreference = "Stop"
+
+function Check-GitExitCode {
+    param ([string]$CommandName)
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "COMMAND FAILED: $CommandName (Exit Code: $LASTEXITCODE)"
+        Write-Error "Script aborted to prevent data loss or partial commits."
+        exit 1
+    }
+}
 
 function Clean-PathString {
     param ([string]$Path)
     if (-not $Path) { return "" }
     
     $clean = $Path.Replace('/', '\')
-    
     $clean = $clean -replace '^["'']+|["'']+$', ''
-    
     $clean = $clean -replace '\\r$', ''
     $clean = $clean -replace '\\n$', ''
-    
     $clean = $clean.TrimEnd([char]0x0D).TrimEnd([char]0x0A).TrimEnd([char]0x0D)
     
     return $clean.Trim()
@@ -106,17 +112,13 @@ function Main {
                 $fSize = $fItem.Length
             }
             catch {
-                Write-Warning "Could not read size for '$file'. Treating as 0 bytes."
                 $fSize = 0
             }
         }
-        else {
-            # File deleted
-            $fSize = 0
-        }
+        else { $fSize = 0 }
 
         if ($fSize -gt $MaxFileSize) {
-            Write-Host "Skipping '$file' ($([math]::Round($fSize/1MB, 2)) MB) - Too large for standard commit." -ForegroundColor Yellow
+            Write-Host "Skipping '$file' ($([math]::Round($fSize/1MB, 2)) MB) - Too large." -ForegroundColor Yellow
             $skippedHighSizeCount++
             continue
         }
@@ -169,22 +171,27 @@ function Main {
         
         $tempFile = [System.IO.Path]::GetTempFileName()
         
-        $batch | ForEach-Object { $_.Replace('\', '/') } | Out-File -FilePath $tempFile -Encoding utf8
-        
         try {
+            $content = $batch | ForEach-Object { $_.Replace('\', '/') }
+            
+            [System.IO.File]::WriteAllLines($tempFile, $content)
+
             git add --pathspec-from-file=$tempFile
+            Check-GitExitCode "git add"
             
             Write-Host "Committing: '$commitMsg'"
             git commit -m "$commitMsg"
+            Check-GitExitCode "git commit"
             
             Write-Host "Pushing..."
             $currentBranch = git rev-parse --abbrev-ref HEAD
             git push $RemoteName $currentBranch
+            Check-GitExitCode "git push"
             
             Write-Host "Batch $i success." -ForegroundColor Green
         }
         catch {
-            Write-Error "Failed during batch $i. Check git output."
+            Write-Error $_
             Remove-Item $tempFile -ErrorAction SilentlyContinue
             exit 1
         }

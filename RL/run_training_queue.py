@@ -12,7 +12,7 @@ PORT_GAP = 64
 
 
 def train_single_agent(agent_data, base_yaml_config, args, worker_index):
-    delay = worker_index * 15
+    delay = 15 # * worker_index
     if delay > 0:
         print(f" [System] Worker {worker_index} waiting {delay}s to avoid CPU spike...")
         time.sleep(delay)

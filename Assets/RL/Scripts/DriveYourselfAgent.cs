@@ -22,6 +22,8 @@ public class DriveYourselfAgent : Agent
     [SerializeField] private TextMeshProUGUI agentAccText;
     [SerializeField] private TextMeshProUGUI agentBrkText;
     [SerializeField] private TextMeshProUGUI agentStrText;
+    [SerializeField] private TextMeshProUGUI agentSpdText;
+    [SerializeField] private TextMeshProUGUI agentDtCText;
 
     [Header("Rewards")]
     [SerializeField, Min(0f)] private float targetSpeed;
@@ -253,6 +255,8 @@ public class DriveYourselfAgent : Agent
         agentAccText.text = "Acc: " + acc.ToString("F4");
         agentBrkText.text = "Brk: " + brk.ToString("F4");
         agentStrText.text = "Str: " + actions.ContinuousActions[1].ToString("F4");
+        agentSpdText.text = "Spd: " + carController.speed.ToString("F1") + " km/h";
+        agentDtCText.text = "DtC: " + vehicleData.ReturnLastDtC() + " m";
 
         // Rewards
         //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
@@ -284,7 +288,7 @@ public class DriveYourselfAgent : Agent
                 // Progress
                 AddReward(deltaProgress);
                 episodeProgressReward += deltaProgress;
-                //Debug.Log("Reward Progress: " + deltaProgress);
+                Debug.Log("Reward Progress: " + deltaProgress);
 
                 // Speed
                 float speedSigma = targetSpeed / 3.0f;
