@@ -5,4 +5,10 @@ Run 002:
  - Trained first 1000 Agents 
  - Speed 20 - 150 km/h
  - 16 Envs * 4 Agents (5 Mio. Steps)
- - Bug: Some Agents have not made any progress, while other (similar ones) were quite good.
+ - Bug: Some agents have not made any progress, while other (similar ones) were quite good.
+
+Run 003:
+ - 500 Agents 
+ - Speed 20 - 150 km/h
+ - 16 Envs * 4 Agents (5 Mio. Steps)
+ - Changed reward for speed -> applied Normalization and Penalty to prevent stuck agents.

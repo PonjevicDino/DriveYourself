@@ -23,6 +23,7 @@ public class DriveYourselfAgent : Agent
     [SerializeField] private TextMeshProUGUI agentBrkText;
     [SerializeField] private TextMeshProUGUI agentStrText;
     [SerializeField] private TextMeshProUGUI agentSpdText;
+    [SerializeField] private TextMeshProUGUI agentRpmText;
     [SerializeField] private TextMeshProUGUI agentDtCText;
 
     [Header("Rewards")]
@@ -239,10 +240,13 @@ public class DriveYourselfAgent : Agent
             brk = Mathf.Abs(actions.ContinuousActions[0]);
         }
 
+        // Time penalty
+        AddReward(-0.005f);
+
         // Engine Inertia
         if (carController.engineRPM > 800.0f * 2.5f)
         {
-            AddReward(0.001f);
+            AddReward(0.006f);
         }
 
         // Move
@@ -256,6 +260,7 @@ public class DriveYourselfAgent : Agent
         agentBrkText.text = "Brk: " + brk.ToString("F4");
         agentStrText.text = "Str: " + actions.ContinuousActions[1].ToString("F4");
         agentSpdText.text = "Spd: " + carController.speed.ToString("F1") + " km/h";
+        agentRpmText.text = "RPM: " + carController.engineRPM.ToString("F0") + " - G: " + carController.currentGear.ToString();
         agentDtCText.text = "DtC: " + vehicleData.ReturnLastDtC() + " m";
 
         // Rewards
@@ -286,9 +291,10 @@ public class DriveYourselfAgent : Agent
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
                 // Progress
-                AddReward(deltaProgress);
-                episodeProgressReward += deltaProgress;
-                Debug.Log("Reward Progress: " + deltaProgress);
+                float weightedProgress = deltaProgress * (150.0f / targetSpeed);
+                AddReward(weightedProgress);
+                episodeProgressReward += weightedProgress;
+                //Debug.Log("Reward Progress: " + weightedProgress);
 
                 // Speed
                 float speedSigma = targetSpeed / 3.0f;
