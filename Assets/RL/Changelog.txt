@@ -9,6 +9,8 @@ Run 002:
 
 Run 003:
  - 500 Agents 
- - Speed 20 - 150 km/h
+ - Speed 20 - 150 km/hass
  - 16 Envs * 4 Agents (5 Mio. Steps)
  - Changed reward for speed -> applied Normalization and Penalty to prevent stuck agents.
+ - Bug fixed: All Agents are making some progress now.
+ - New Bug: All Agents are quite the same (similar high speed and a high amount of cornering).
