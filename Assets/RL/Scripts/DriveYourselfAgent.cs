@@ -290,6 +290,15 @@ public class DriveYourselfAgent : Agent
                 //Debug.Log("AGENT Progress: " + lastLap + ", Progress: " + lastLapProgress + "%");
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
+                float currentSpeed = vehicleData.GetSpeed();
+                float speedCapRatio = 1.0f;
+                if (currentSpeed > targetSpeed && currentSpeed > 0.1f)
+                {
+                    speedCapRatio = targetSpeed / currentSpeed;
+                }
+
+                float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
+
                 // Progress
                 float weightedProgress = deltaProgress * (150.0f / targetSpeed);
                 AddReward(weightedProgress);
