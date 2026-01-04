@@ -92,6 +92,9 @@ public class DriveYourselfAgent : Agent
         DtCRewardPercent = Academy.Instance.EnvironmentParameters.GetWithDefault("dtc_weight", 0.33f) * 100f;
         speedRewardPercent = 100f - DtCRewardPercent;
 
+        // TODO: Remove in next Run batch. Excessive logging!
+        Debug.Log($"[Agent Setup] Name: {transform.name} | Target Speed: {targetSpeed} | DtC %: {DtCRewardPercent}");
+
         episodeProgressReward = 0.0f;
         episodeSpeedReward = 0.0f;
         episodeSpeedDeviation = 0.0f;

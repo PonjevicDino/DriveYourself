@@ -53,9 +53,9 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index):
     ]
 
     cmd.append("--env-args")
-    cmd.append("-target_speed")
+    cmd.append("target_speed")
     cmd.append(str(speed))
-    cmd.append("-dtc_weight")
+    cmd.append("dtc_weight")
     cmd.append(str(dtc_weight))
 
     try:

@@ -20,3 +20,10 @@ Run 004:
  - Speed 20 - 150 km/h
  - 16 Envs * 4 Agents (5 Mio. Steps)
  - Changes reward for speed -> Clamping at the max speed to prevent driving too fast.
+ - Bug: Agents are still quite similar -> Should be fixed for next run.
+
+Run 005:
+ - 500 Agents 
+ - Speed 20 - 150 km/h
+ - 16 Envs * 4 Agents (5 Mio. Steps)
+ - Fix for different Agent (Speed/DtC) - Agent has received the default values -> Fixed in training script
