@@ -32,6 +32,11 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index):
     temp_config_path = f"temp_config_{run_id}.yaml"
 
     local_config = base_yaml_config.copy()
+    local_config["environment_parameters"] = {
+        "target_speed": float(speed),
+        "dtc_weight": float(dtc_weight)
+    }
+    
     if 'behaviors' in local_config:
         for behavior_name in local_config['behaviors']:
             local_config['behaviors'][behavior_name]['max_steps'] = args.steps
@@ -51,12 +56,6 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index):
         "--width=512", "--height=512",
         "--timeout-wait=300"
     ]
-
-    cmd.append("--env-args")
-    cmd.append("target_speed")
-    cmd.append(str(speed))
-    cmd.append("dtc_weight")
-    cmd.append(str(dtc_weight))
 
     try:
         process = subprocess.Popen(
