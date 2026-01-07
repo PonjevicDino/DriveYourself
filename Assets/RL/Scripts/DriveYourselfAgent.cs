@@ -27,8 +27,8 @@ public class DriveYourselfAgent : Agent
     [SerializeField] private TextMeshProUGUI agentDtCText;
 
     [Header("Rewards")]
-    [SerializeField, Min(0f)] private float targetSpeed;
-    [SerializeField, Range(0.0f,100.0f)] private float speedRewardPercent;
+    [SerializeField, Min(0f)] public float targetSpeed;
+    [SerializeField, Range(0.0f,100.0f)] public float speedRewardPercent;
     //[SerializeField, Min(0f)] private float maxAllowedSafeAcc;
     //[SerializeField, Min(0f)] private float maxAllowedRewardAcc;
     //[SerializeField, Range(0.0f,100.0f)] private float accRewardPercent;
@@ -266,7 +266,7 @@ public class DriveYourselfAgent : Agent
         agentDtCText.text = "DtC: " + vehicleData.ReturnLastDtC() + " m";
 
         // Rewards
-        //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
+        Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
         if (!movedFromInit && Vector3.Distance(startingPositionForEpisode, carController.transform.position) > startingThreshold)
         {
             movedFromInit = true;
@@ -396,6 +396,12 @@ public class DriveYourselfAgent : Agent
 
         long stepCount = fixedUpdateCounter > 0 ? fixedUpdateCounter : 1;
         float lapsCompleted = (vehicleData.GetLap() - 1) + (vehicleData.GetProgress() / 100f);
+        //Debug.LogWarning("Completed Laps: " + lapsCompleted);
+        if (!startedFirstLap)
+        {
+            lapsCompleted = 0;
+        }
+
         var stats = Academy.Instance.StatsRecorder;
 
         stats.Add("Custom/Laps Completed", lapsCompleted, StatAggregationMethod.Average);

@@ -24,6 +24,7 @@ public class AgentSelector : MonoBehaviour
     [SerializeField] private string currentLoadedModel = "None";
 
     private BehaviorParameters behaviorParameters;
+    private DriveYourselfAgent agent;
 
     private void OnEnable()
     {
@@ -42,6 +43,9 @@ public class AgentSelector : MonoBehaviour
     {
         if (behaviorParameters == null)
             behaviorParameters = GetComponent<BehaviorParameters>();
+
+        if (agent == null)
+            agent = GetComponent<DriveYourselfAgent>();
     }
 
     public void FindAndAssignModel()
@@ -115,6 +119,7 @@ public class AgentSelector : MonoBehaviour
             {
                 behaviorParameters.Model = model;
                 currentLoadedModel = bestFileName;
+                SetModelRewardStats(model.name);
             }
             else
             {
@@ -124,5 +129,14 @@ public class AgentSelector : MonoBehaviour
 #else
         Debug.LogWarning("[ModelSelector] This script currently relies on AssetDatabase and only works in the Unity Editor.");
 #endif
+    }
+
+    private void SetModelRewardStats(string name)
+    {
+        int targetSpeed = int.Parse(name.Split("-")[1].Substring(1));
+        int speedRewardPercent = int.Parse(name.Split("-")[2].Substring(1));
+
+        agent.targetSpeed = targetSpeed;
+        agent.speedRewardPercent = speedRewardPercent;
     }
 }

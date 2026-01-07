@@ -1037,7 +1037,7 @@ MonoBehaviour:
     VectorActionDescriptions: []
     VectorActionSpaceType: 1
     hasUpgradedBrainParametersWithActionSpec: 1
-  m_Model: {fileID: 0}
+  m_Model: {fileID: 5022602860645237092, guid: 82b45b075e3f8bb4a8dfe1ff4503ed7d, type: 3}
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: TestModel
@@ -1070,7 +1070,7 @@ MonoBehaviour:
   agentRpmText: {fileID: 868582843}
   agentDtCText: {fileID: 880381071}
   targetSpeed: 50
-  speedRewardPercent: 65
+  speedRewardPercent: 66
   maxAllowedRewardDtc: 3
   DtCRewardPercent: 35
   endEpisodeAfterCompletedLaps: 1
@@ -1147,16 +1147,16 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 200363779}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2b95f1f7289d1f541993cb87561d4645, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   rootFolder: Assets/RL/Models
-  runPrefix: Run004
+  runPrefix: Run005
   targetSpeed: 0
   targetWeight: 0
-  currentLoadedModel: 295-S020-W17.onnx
+  currentLoadedModel: 237-S020-W15.onnx
 --- !u!1001 &359858341
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2698,7 +2698,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2f30602038963442b284fb2050dbf26, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  agents: 4
+  agents: 1
 --- !u!1001 &958148086
 PrefabInstance:
   m_ObjectHideFlags: 0
