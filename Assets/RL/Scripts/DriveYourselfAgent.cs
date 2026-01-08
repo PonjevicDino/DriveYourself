@@ -42,7 +42,6 @@ public class DriveYourselfAgent : Agent
     [SerializeField, Min(1)] private int endEpisodeAfterCompletedLaps = 1;
     [SerializeField] private int endEpisodeCarYPosition = -2;
     [SerializeField] private int endEpisodeCarStuckSeconds = 15;
-    [SerializeField] private float startingThreshold = 1.0f;
 
     private GetVehicleData vehicleData;
     private Rigidbody carRb;
@@ -52,7 +51,8 @@ public class DriveYourselfAgent : Agent
 
     private float lastLapProgress = 0.0f;
     private int lastLap = 0;
-    private bool movedFromInit = false;
+
+    public bool startedFirstLap = false;
 
     [SerializeField, Min(0.0f)] private float startingPositionSidewaysOffset;
     [SerializeField, Range(0.0f, 180.0f)] private float startingRotationForEpisode;
@@ -134,9 +134,10 @@ public class DriveYourselfAgent : Agent
         //carController.engineRunning = false;
         //carController.engineRPMRaw = 0;
 
-        movedFromInit = false;
         lastLap = 0;
         lastLapProgress = 0.0f;
+
+        startedFirstLap = false;
 
         fixedUpdateCounter = 0L;
         timeAtLastSignificantMove = 0.0d;
@@ -266,15 +267,10 @@ public class DriveYourselfAgent : Agent
         agentDtCText.text = "DtC: " + vehicleData.ReturnLastDtC() + " m";
 
         // Rewards
-        Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
-        if (!movedFromInit && Vector3.Distance(startingPositionForEpisode, carController.transform.position) > startingThreshold)
-        {
-            movedFromInit = true;
-        }
-
+        //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
         float currentProgress = vehicleData.GetProgress();
         float deltaProgress = Mathf.Max(0.0f, currentProgress - lastLapProgress);
-        if (movedFromInit && (deltaProgress > 0.0f || (vehicleData.GetLap() > lastLap && currentProgress < 50.0f)))
+        if (startedFirstLap && (deltaProgress > 0.0f || (vehicleData.GetLap() > lastLap && currentProgress < 50.0f)))
         {
             if (currentProgress < 50.0f)
             {
@@ -289,7 +285,7 @@ public class DriveYourselfAgent : Agent
             }
             else if (lastLap > 0)
             {
-                //Debug.Log("AGENT Progress: " + lastLap + ", Progress: " + lastLapProgress + "%");
+                Debug.Log("AGENT Progress: " + lastLap + ", Progress: " + lastLapProgress + "%");
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
                 float currentSpeed = vehicleData.GetSpeed();
@@ -369,9 +365,9 @@ public class DriveYourselfAgent : Agent
         }
         else if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
         {
-            float stuckPunishment = -10.0f + Mathf.Clamp(Vector3.Distance(carController.transform.position, startingPosition), 0.0f, startingThreshold) * 10.0f / startingThreshold;
+            float stuckPunishment = -100.0f;
             AddReward(stuckPunishment);
-            //Debug.LogWarning($"Episode end: Car stuck (or agent didn't move)! Moved for: " + Vector3.Distance(carController.transform.position, startingPosition) + "m");
+            //Debug.LogWarning($"Episode end: Car stuck (or agent didn't move)!");
             InjectStats();
             EndEpisode();
             return;
@@ -403,6 +399,7 @@ public class DriveYourselfAgent : Agent
         }
 
         var stats = Academy.Instance.StatsRecorder;
+        Debug.Log("Total Reward: " + episodeProgressReward);
 
         stats.Add("Custom/Laps Completed", lapsCompleted, StatAggregationMethod.Average);
         stats.Add("Custom/Total Progress Reward", episodeProgressReward, StatAggregationMethod.Average);

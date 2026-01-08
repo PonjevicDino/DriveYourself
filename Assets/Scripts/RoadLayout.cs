@@ -35,7 +35,6 @@ public class RoadLayout : MonoBehaviour
     {
         Vector3 toTarget = nextPoint.position - carController.transform.position;
         float distance = toTarget.magnitude;
-        float angleToTarget = Vector3.Angle(carController.transform.forward, toTarget);
 
         float threshHoldMult = Mathf.Clamp(carController.speed / 100, 1, 9);
         if (distance < reachThreshold * threshHoldMult)
