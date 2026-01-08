@@ -28,7 +28,7 @@ public class DriveYourselfAgent : Agent
 
     [Header("Rewards")]
     [SerializeField, Min(0f)] public float targetSpeed;
-    [SerializeField, Range(0.0f,100.0f)] public float speedRewardPercent;
+    [SerializeField, Range(0.0f,100.0f)] private float speedRewardPercent;
     //[SerializeField, Min(0f)] private float maxAllowedSafeAcc;
     //[SerializeField, Min(0f)] private float maxAllowedRewardAcc;
     //[SerializeField, Range(0.0f,100.0f)] private float accRewardPercent;
@@ -36,7 +36,7 @@ public class DriveYourselfAgent : Agent
     //[SerializeField, Min(0f)] private float maxAllowedRewardJerk;
     //[SerializeField, Range(0.0f,100.0f)] private float jerkRewardPercent;
     [SerializeField, Min(0f)] private float maxAllowedRewardDtc;
-    [SerializeField, Range(0.0f,100.0f)] private float DtCRewardPercent;
+    [SerializeField, Range(0.0f,100.0f)] public float DtCRewardPercent;
 
     [Header("EndEpisodeConditions")]
     [SerializeField, Min(1)] private int endEpisodeAfterCompletedLaps = 1;
@@ -88,8 +88,12 @@ public class DriveYourselfAgent : Agent
 
     public override void OnEpisodeBegin()
     {
-        targetSpeed = Academy.Instance.EnvironmentParameters.GetWithDefault("target_speed", 50.0f);
-        DtCRewardPercent = Academy.Instance.EnvironmentParameters.GetWithDefault("dtc_weight", 0.33f) * 100f;
+        if (!this.GetComponent<AgentSelector>().enabled)
+        {
+            targetSpeed = Academy.Instance.EnvironmentParameters.GetWithDefault("target_speed", 50.0f);
+            DtCRewardPercent = Academy.Instance.EnvironmentParameters.GetWithDefault("dtc_weight", 0.33f) * 100f;
+        }
+
         speedRewardPercent = 100f - DtCRewardPercent;
 
         // Debug.Log($"[Agent Setup] Name: {transform.name} | Target Speed: {targetSpeed} | DtC %: {DtCRewardPercent}");
@@ -285,7 +289,7 @@ public class DriveYourselfAgent : Agent
             }
             else if (lastLap > 0)
             {
-                Debug.Log("AGENT Progress: " + lastLap + ", Progress: " + lastLapProgress + "%");
+                //Debug.Log("AGENT Progress: " + lastLap + ", Progress: " + lastLapProgress + "%");
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
                 float currentSpeed = vehicleData.GetSpeed();
@@ -298,7 +302,7 @@ public class DriveYourselfAgent : Agent
                 float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
 
                 // Progress
-                float weightedProgress = deltaProgress * (150.0f / targetSpeed);
+                float weightedProgress = deltaProgress * (150.0f / targetSpeed) * speedCapRatio;
                 AddReward(weightedProgress);
                 episodeProgressReward += weightedProgress;
                 //Debug.Log("Reward Progress: " + weightedProgress);
@@ -309,7 +313,7 @@ public class DriveYourselfAgent : Agent
                 float bellCurveSpeed = Mathf.Exp(-(speedDifference * speedDifference) / (2 * speedSigma * speedSigma));
                 if (carController.currentGear != -1)
                 {
-                    float speedReward = bellCurveSpeed * (speedRewardPercent / 100.0f);
+                    float speedReward = bellCurveSpeed * (speedRewardPercent / 100.0f) * 10.0f;
                     AddReward(speedReward);
                     episodeSpeedReward += speedReward;
                     //Debug.Log("Reward Speed: " + (speedReward));
@@ -356,7 +360,7 @@ public class DriveYourselfAgent : Agent
                 float dtcSigma = maxAllowedRewardDtc / 3.0f;
                 float currentDtC = vehicleData.ReturnLastDtC();
                 float bellCurveDtC = Mathf.Exp(-(currentDtC * currentDtC) / (2 * dtcSigma * dtcSigma));
-                float DtCReward = bellCurveDtC * (DtCRewardPercent / 100.0f);
+                float DtCReward = bellCurveDtC * (DtCRewardPercent / 100.0f) * 10.0f;
                 AddReward(DtCReward);
                 episodeDtCReward += DtCReward;
                 episodeDtCDeviation += Mathf.Abs(vehicleData.ReturnLastDtC());
@@ -399,7 +403,7 @@ public class DriveYourselfAgent : Agent
         }
 
         var stats = Academy.Instance.StatsRecorder;
-        Debug.Log("Total Reward: " + episodeProgressReward);
+        //Debug.Log("Total Reward: " + episodeProgressReward);
 
         stats.Add("Custom/Laps Completed", lapsCompleted, StatAggregationMethod.Average);
         stats.Add("Custom/Total Progress Reward", episodeProgressReward, StatAggregationMethod.Average);

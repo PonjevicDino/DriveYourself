@@ -137,6 +137,6 @@ public class AgentSelector : MonoBehaviour
         int speedRewardPercent = int.Parse(name.Split("-")[2].Substring(1));
 
         agent.targetSpeed = targetSpeed;
-        agent.speedRewardPercent = speedRewardPercent;
+        agent.DtCRewardPercent = speedRewardPercent;
     }
 }
