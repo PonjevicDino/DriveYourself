@@ -293,32 +293,22 @@ public class DriveYourselfAgent : Agent
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
                 float currentSpeed = vehicleData.GetSpeed();
-                float speedCapRatio = 1.0f;
-                if (currentSpeed > targetSpeed && currentSpeed > 0.1f)
-                {
-                    speedCapRatio = targetSpeed / currentSpeed;
-                }
-
+                float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
                 float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
-
-                // Progress
-                float weightedProgress = deltaProgress * (150.0f / targetSpeed) * speedCapRatio;
-                AddReward(weightedProgress);
-                episodeProgressReward += weightedProgress;
-                //Debug.Log("Reward Progress: " + weightedProgress);
+                float baseReward = deltaProgress * normalization;
+                float speedMultiplier = 0.0f;
 
                 // Speed
-                float speedSigma = targetSpeed / 3.0f;
-                float speedDifference = vehicleData.GetSpeed() - targetSpeed;
-                float bellCurveSpeed = Mathf.Exp(-(speedDifference * speedDifference) / (2 * speedSigma * speedSigma));
-                if (carController.currentGear != -1)
+                if (currentSpeed > targetSpeed && currentSpeed > 0.1f)
                 {
-                    float speedReward = bellCurveSpeed * (speedRewardPercent / 100.0f) * 10.0f;
-                    AddReward(speedReward);
-                    episodeSpeedReward += speedReward;
-                    //Debug.Log("Reward Speed: " + (speedReward));
+                    speedMultiplier = targetSpeed / currentSpeed;
                 }
-                episodeSpeedDeviation += Mathf.Abs(targetSpeed - vehicleData.GetSpeed());
+                else
+                {
+                    float ratio = currentSpeed / targetSpeed;
+                    speedMultiplier = (ratio * ratio);
+                    if (ratio > 0.95f) speedMultiplier *= 1.2f;
+                }
 
                 // Acceleration
                 /*
@@ -357,20 +347,29 @@ public class DriveYourselfAgent : Agent
                 */
 
                 // Distance to Center
-                float dtcSigma = maxAllowedRewardDtc / 3.0f;
-                float currentDtC = vehicleData.ReturnLastDtC();
+                float safeDist = Mathf.Max(maxAllowedRewardDtc, 1.0f);
+                float dtcSigma = safeDist / 3.5f;
                 float bellCurveDtC = Mathf.Exp(-(currentDtC * currentDtC) / (2 * dtcSigma * dtcSigma));
-                float DtCReward = bellCurveDtC * (DtCRewardPercent / 100.0f) * 10.0f;
-                AddReward(DtCReward);
-                episodeDtCReward += DtCReward;
-                episodeDtCDeviation += Mathf.Abs(vehicleData.ReturnLastDtC());
+
+                float strictness = DtCRewardPercent / 100.0f;
+                float safetyMultiplier = Mathf.Lerp(1.0f, bellCurveDtC, strictness);
                 //Debug.Log("Reward DtC: " + DtCReward);
+
+
+                // Final Reward
+                float finalReward = baseReward * speedMultiplier * safetyMultiplier;
+                AddReward(finalReward);
+
+                episodeProgressReward += finalReward;
+                episodeSpeedReward += speedMultiplier;
+                episodeDtCReward += safetyMultiplier;
+                episodeSpeedDeviation += Mathf.Abs(targetSpeed - currentSpeed);
+                episodeDtCDeviation += currentDtC;
             }
         }
         else if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
         {
-            float stuckPunishment = -100.0f;
-            AddReward(stuckPunishment);
+            AddReward(-1.0f);
             //Debug.LogWarning($"Episode end: Car stuck (or agent didn't move)!");
             InjectStats();
             EndEpisode();
@@ -379,7 +378,7 @@ public class DriveYourselfAgent : Agent
 
         if (carController.transform.position.y < endEpisodeCarYPosition)
         {
-            AddReward(-50.0f);
+            AddReward(-1.0f);
             //Debug.LogWarning("Episode end: Car out of Map!");
             InjectStats();
             EndEpisode();
