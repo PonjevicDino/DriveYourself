@@ -198,19 +198,14 @@ public class DriveYourselfAgent : Agent
         List<float> nextRoadSegments = new List<float>();  
         for (int segment = 0; segment < lookAheadSegments; segment++)
         {
-            switch (currentSegment.name.Split("_")[1])
-            {
-                case "left":
-                    nextRoadSegments.Add(-1);
-                    break;
-                case "right":
-                    nextRoadSegments.Add(1);
-                    break;
-                default:
-                    nextRoadSegments.Add(0);
-                    break;
-            }
             currentSegment = vehicleData.GetNextRoadSegment(currentSegment);
+            Vector3 relativePos = carController.transform.InverseTransformPoint(currentSegment.transform.position);
+
+            sensor.AddObservation(relativePos.x / 100.0f);
+            sensor.AddObservation(relativePos.z / 100.0f);
+#if UNITY_EDITOR
+            Debug.DrawLine(carController.transform.position, currentSegment.transform.position, Color.yellow);
+#endif
         }
         sensor.AddObservation(nextRoadSegments);
 

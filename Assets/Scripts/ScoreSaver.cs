@@ -492,8 +492,10 @@ public class ScoreSaver : MonoBehaviour
             Vector3 leftPairPos = roadSegment.transform.Find("DtC-Tracker").Find("P" + pairIndex + "L").transform.position;
             Vector3 rightPairPos = roadSegment.transform.Find("DtC-Tracker").Find("P" + pairIndex + "R").transform.position;
 
+#if UNITY_EDITOR
             Debug.DrawLine(vehiclePos, leftPairPos, Color.white);
             Debug.DrawLine(vehiclePos, rightPairPos, Color.white);
+#endif
 
             pairDistances.Add(Vector2.Distance(new Vector2(leftPairPos.x, leftPairPos.z), new Vector2(vehiclePos.x, vehiclePos.z)) + Vector2.Distance(new Vector2(rightPairPos.x, rightPairPos.z), new Vector2(vehiclePos.x, vehiclePos.z)));
         }
@@ -502,8 +504,10 @@ public class ScoreSaver : MonoBehaviour
             Vector3 leftNextPairPos = nextReadSegment.transform.Find("DtC-Tracker").Find("P" + pairIndex + "L").transform.position;
             Vector3 rightNextPairPos = nextReadSegment.transform.Find("DtC-Tracker").Find("P" + pairIndex + "R").transform.position;
 
+#if UNITY_EDITOR
             Debug.DrawLine(vehiclePos, leftNextPairPos, Color.blue);
             Debug.DrawLine(vehiclePos, rightNextPairPos, Color.blue);
+#endif
 
             pairDistances.Add(Vector2.Distance(new Vector2(leftNextPairPos.x, leftNextPairPos.z), new Vector2(vehiclePos.x, vehiclePos.z)) + Vector2.Distance(new Vector2(rightNextPairPos.x, rightNextPairPos.z), new Vector2(vehiclePos.x, vehiclePos.z)));
         }
@@ -523,8 +527,10 @@ public class ScoreSaver : MonoBehaviour
             pairRPos = roadSegment.transform.Find("DtC-Tracker").Find("P" + (nearestPair + 1) + "R").transform.position;
         }
 
+#if UNITY_EDITOR
         Debug.DrawLine(vehiclePos, pairLPos, Color.red);
         Debug.DrawLine(vehiclePos, pairRPos, Color.red);
+#endif
         float pairDist = Vector3.Distance(pairRPos, pairLPos);
         float distPercentage = pairDistances.Min() / pairDist;
 

@@ -1028,7 +1028,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_BrainParameters:
-    VectorObservationSize: 13
+    VectorObservationSize: 24
     NumStackedVectorObservations: 1
     m_ActionSpec:
       m_NumContinuousActions: 2
@@ -1062,17 +1062,17 @@ MonoBehaviour:
     maxStep: 0
   hasUpgradedFromAgentParameters: 1
   MaxStep: 0
-  lookAheadSegments: 3
+  lookAheadSegments: 7
   agentAccText: {fileID: 560227466}
   agentBrkText: {fileID: 522200965}
   agentStrText: {fileID: 1021866579}
   agentSpdText: {fileID: 1073547967}
   agentRpmText: {fileID: 868582843}
   agentDtCText: {fileID: 880381071}
-  targetSpeed: 50
+  targetSpeed: 141
   speedRewardPercent: 66
   maxAllowedRewardDtc: 5
-  DtCRewardPercent: 33
+  DtCRewardPercent: 49
   endEpisodeAfterCompletedLaps: 1
   endEpisodeCarYPosition: -2
   endEpisodeCarStuckSeconds: 30
@@ -1156,7 +1156,7 @@ MonoBehaviour:
   runPrefix: Run006
   targetSpeed: 200
   targetWeight: 100
-  currentLoadedModel: 011-S138-W71.onnx
+  currentLoadedModel: 019-S141-W49.onnx
 --- !u!1001 &359858341
 PrefabInstance:
   m_ObjectHideFlags: 0
