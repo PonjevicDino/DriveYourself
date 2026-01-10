@@ -1,0 +1,90 @@
+environment_parameters:
+  difficulty_ratio:
+    curriculum:
+      # --- PHASE 1: CRAWLING (Learning to Steer) ---
+      - name: Lesson0_Start
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 50
+          threshold: 0.10
+        value: 0.40
+
+      - name: Lesson1_Basic
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 50
+          threshold: 0.15
+        value: 0.45
+
+      - name: Lesson2_Moving
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 50
+          threshold: 0.20
+        value: 0.50
+
+      # --- PHASE 2: CRUISING (Learning Momentum) ---
+      - name: Lesson3_PickUpPace
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 75
+          threshold: 0.25
+        value: 0.56
+
+      - name: Lesson4_HalfwayThere
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 75
+          threshold: 0.30
+        value: 0.62
+
+      - name: Lesson5_Cruising
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.40
+        value: 0.68
+
+      # --- PHASE 3: RACING (Learning Braking) ---
+      - name: Lesson6_PickingUpSpeed
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.50
+        value: 0.75
+
+      - name: Lesson7_Fast
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.60
+        value: 0.85
+
+      - name: Lesson8_GraduationExam
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 150
+          threshold: 0.66
+        value: 0.92
+
+      # --- PHASE 4: REALITY ---
+      - name: Lesson9_FullPower
+        value: 1.0

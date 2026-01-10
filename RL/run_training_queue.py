@@ -12,52 +12,68 @@ PORT_GAP = 64
 
 
 def train_single_agent(agent_data, base_yaml_config, args, worker_index):
-    delay = 15 # * worker_index
-    if delay > 0:
-        print(f" [System] Worker {worker_index} waiting {delay}s to avoid CPU spike...")
-        time.sleep(delay)
-        
-    run_id = agent_data.get("id", "Unknown_Agent")
-    speed = agent_data.get("speed", 50)
-    dtc_weight = agent_data.get("dtc_weight", 0.5)
-
-    assigned_port = BASE_PORT + (worker_index * PORT_GAP)
-
-    print(f"------------------------------------------------")
-    print(f" [Worker {worker_index}] STARTING: {run_id}")
-    print(f" >> Target: {speed} km/h | DtC: {dtc_weight}")
-    print(f" >> Base Port: {assigned_port} (Range: {assigned_port}-{assigned_port + 16})")
-    print(f"------------------------------------------------")
-
-    temp_config_path = f"temp_config_{run_id}.yaml"
-
-    local_config = base_yaml_config.copy()
-    local_config["environment_parameters"] = {
-        "target_speed": float(speed),
-        "dtc_weight": float(dtc_weight)
-    }
-    
-    if 'behaviors' in local_config:
-        for behavior_name in local_config['behaviors']:
-            local_config['behaviors'][behavior_name]['max_steps'] = args.steps
-
-    with open(temp_config_path, 'w') as f:
-        yaml.dump(local_config, f)
-
-    cmd = [
-        "mlagents-learn",
-        temp_config_path,
-        f"--run-id={run_id}",
-        f"--env={args.env}",
-        f"--base-port={assigned_port}",
-        "--num-envs=16",
-        "--no-graphics",
-        "--force",
-        "--width=512", "--height=512",
-        "--timeout-wait=300"
-    ]
-
     try:
+        delay = 5
+        if delay > 0:
+            print(f" [System] Worker {worker_index} waiting {delay}s to avoid CPU spike...")
+            time.sleep(delay)
+
+        run_id = agent_data.get("id", "Unknown_Agent")
+        speed = agent_data.get("speed", 50)
+        dtc_weight = agent_data.get("dtc_weight", 0.5)
+
+        assigned_port = BASE_PORT + (worker_index * PORT_GAP)
+
+        print(f"------------------------------------------------")
+        print(f" [Worker {worker_index}] STARTING: {run_id}")
+        print(f" >> Target: {speed} km/h | DtC: {dtc_weight}")
+        print(f" >> Base Port: {assigned_port}")
+        print(f"------------------------------------------------")
+
+        temp_config_path = f"temp_config_{run_id}.yaml"
+
+        curriculum_path = "Config/DriveYourself/Curriculum.yaml"
+
+        curriculum_data = {}
+        if os.path.exists(curriculum_path):
+            with open(curriculum_path, 'r') as f:
+                full_curriculum_yaml = yaml.safe_load(f)
+                if full_curriculum_yaml is None:
+                    print(f" [Warning] {curriculum_path} is empty or invalid YAML!")
+                    full_curriculum_yaml = {}
+
+                curriculum_data = full_curriculum_yaml.get("environment_parameters", {})
+        else:
+            print(f" [Warning] Curriculum file not found at {curriculum_path}! Running without it.")
+
+        local_config = base_yaml_config.copy()
+
+        merged_params = curriculum_data.copy()
+        merged_params["target_speed"] = float(speed)
+        merged_params["dtc_weight"] = float(dtc_weight)
+
+        local_config["environment_parameters"] = merged_params
+
+        if 'behaviors' in local_config:
+            for behavior_name in local_config['behaviors']:
+                local_config['behaviors'][behavior_name]['max_steps'] = args.steps
+
+        with open(temp_config_path, 'w') as f:
+            yaml.dump(local_config, f)
+
+        cmd = [
+            "mlagents-learn",
+            temp_config_path,
+            f"--run-id={run_id}",
+            f"--env={args.env}",
+            f"--base-port={assigned_port}",
+            "--num-envs=16",
+            "--no-graphics",
+            "--force",
+            "--width=512", "--height=512",
+            "--timeout-wait=300"
+        ]
+
         process = subprocess.Popen(
             cmd,
             creationflags=subprocess.CREATE_NEW_CONSOLE
@@ -66,15 +82,20 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index):
         return_code = process.wait()
 
         if return_code == 0:
-            print(f" [Worker {worker_index}] FINISHED: {run_id} (Success)\n")
+            print(f" [Worker {worker_index}] FINISHED: {run_id} (Success)")
         else:
-            print(f" [Worker {worker_index}] FAILED: {run_id} (Exit Code: {return_code})\n")
+            print(f" [Worker {worker_index}] FAILED: {run_id} (Exit Code: {return_code})")
 
     except Exception as e:
-        print(f" [Worker {worker_index}] CRASHED: {run_id}. Error: {e}\n")
+        print(f" [Worker {worker_index}] CRASHED (PYTHON ERROR): {run_id}")
+        print(f" Error Details: {e}\n")
+        import traceback
+        traceback.print_exc()
+
     finally:
-        if os.path.exists(temp_config_path):
-            os.remove(temp_config_path)
+        # if os.path.exists(temp_config_path):
+        #    os.remove(temp_config_path)
+        pass
 
 
 def run_training_manager():

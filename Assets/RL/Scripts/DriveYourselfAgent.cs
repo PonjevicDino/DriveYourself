@@ -88,10 +88,14 @@ public class DriveYourselfAgent : Agent
 
     public override void OnEpisodeBegin()
     {
+        float difficultyRatio = 1.0f;
+
         if (!this.GetComponent<AgentSelector>().enabled)
         {
-            targetSpeed = Academy.Instance.EnvironmentParameters.GetWithDefault("target_speed", 50.0f);
+            float rawTargetSpeed = Academy.Instance.EnvironmentParameters.GetWithDefault("target_speed", 50.0f);
+            difficultyRatio = Academy.Instance.EnvironmentParameters.GetWithDefault("difficulty_ratio", 1.0f);
             DtCRewardPercent = Academy.Instance.EnvironmentParameters.GetWithDefault("dtc_weight", 0.33f) * 100f;
+            targetSpeed = Mathf.Max(20.0f, rawTargetSpeed * difficultyRatio);
         }
 
         speedRewardPercent = 100f - DtCRewardPercent;
