@@ -17,6 +17,7 @@ public class DriveYourselfAgent : Agent
     private float episodeDtCReward;
     private float episodeDtCDeviation;
     private float effectiveRatio = 0.0f;
+    private float previousSteerInput = 0.0f;
 
     [SerializeField] private int lookAheadSegments;
 
@@ -250,13 +251,17 @@ public class DriveYourselfAgent : Agent
         }
 
         // Time penalty
-        AddReward(-0.005f);
+        //AddReward(-0.005f);
 
         // Engine Inertia
-        if (carController.engineRPM > 800.0f * 2.5f)
+        if (carController.engineRPM > 800.0f * 2.0f)
         {
-            AddReward(0.006f);
+            AddReward(0.001f);
         }
+
+        // Steering check
+        float steeringChange = Mathf.Abs(actions.ContinuousActions[1] - previousSteerInput);
+        previousSteerInput = actions.ContinuousActions[1];
 
         // Move
         carController.throttleInput = acc;
@@ -310,7 +315,7 @@ public class DriveYourselfAgent : Agent
                 {
                     float ratio = currentSpeed / Mathf.Max(targetSpeed, 1.0f);
                     speedMultiplier = (ratio * ratio);
-                    if (ratio > 0.95f) speedMultiplier *= 1.1f;
+                    if (ratio > 0.90f) speedMultiplier = 1.0f;
                 }
                 float clampedSpeedMult = Mathf.Max(speedMultiplier, 0.1f);
 
@@ -355,12 +360,25 @@ public class DriveYourselfAgent : Agent
                 float safeDist = Mathf.Max(maxAllowedRewardDtc, 1.0f);
                 float dtcSigma = Mathf.Lerp(safeDist, 0.5f, weightRatio);
                 float bellCurveDtC = Mathf.Exp(-(currentDtC * currentDtC) / (2 * dtcSigma * dtcSigma));
-                float safetyMultiplier = Mathf.Lerp(1.0f, bellCurveDtC, weightRatio);
+
+                Transform nextSegment = vehicleData.GetNextRoadSegment(vehicleData.GetRoadSegment()).transform;
+                Vector3 roadDirection = (nextSegment.position - carController.transform.position).normalized;
+                float angleError = Vector3.Angle(carController.transform.forward, roadDirection);
+                float alignmentFactor = Mathf.Clamp01(1.0f - (angleError / 30.0f));
+
+                float safetyMultiplier = bellCurveDtC * Mathf.Lerp(1.0f, alignmentFactor, weightRatio);
                 float clampedSafetyMult = Mathf.Max(safetyMultiplier, 0.1f);
                 //Debug.Log("Reward DtC: " + DtCReward);
 
+                // Steering
+                float stabilityPenalty = 0.0f;
+                if (weightRatio > 0.5f)
+                {
+                    stabilityPenalty = steeringChange * 0.05f * weightRatio;
+                }
+
                 // Final Reward
-                float finalReward = baseReward * clampedSpeedMult * clampedSafetyMult;
+                float finalReward = (baseReward * clampedSpeedMult * clampedSafetyMult) - stabilityPenalty;
                 AddReward(finalReward);
 
                 episodeProgressReward += finalReward;
