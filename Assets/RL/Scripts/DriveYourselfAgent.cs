@@ -16,6 +16,7 @@ public class DriveYourselfAgent : Agent
     private float episodeSpeedDeviation;
     private float episodeDtCReward;
     private float episodeDtCDeviation;
+    private float effectiveRatio = 0.0f;
 
     [SerializeField] private int lookAheadSegments;
 
@@ -28,7 +29,6 @@ public class DriveYourselfAgent : Agent
 
     [Header("Rewards")]
     [SerializeField, Min(0f)] public float targetSpeed;
-    [SerializeField, Range(0.0f,100.0f)] private float speedRewardPercent;
     //[SerializeField, Min(0f)] private float maxAllowedSafeAcc;
     //[SerializeField, Min(0f)] private float maxAllowedRewardAcc;
     //[SerializeField, Range(0.0f,100.0f)] private float accRewardPercent;
@@ -37,6 +37,9 @@ public class DriveYourselfAgent : Agent
     //[SerializeField, Range(0.0f,100.0f)] private float jerkRewardPercent;
     [SerializeField, Min(0f)] private float maxAllowedRewardDtc;
     [SerializeField, Range(0.0f,100.0f)] public float DtCRewardPercent;
+
+    [Header("Speeds")]
+    [SerializeField] private float minCurriculumTrainingSpeed = 40.0f;
 
     [Header("EndEpisodeConditions")]
     [SerializeField, Min(1)] private int endEpisodeAfterCompletedLaps = 1;
@@ -52,7 +55,7 @@ public class DriveYourselfAgent : Agent
     private float lastLapProgress = 0.0f;
     private int lastLap = 0;
 
-    public bool startedFirstLap = false;
+    [HideInInspector] public bool startedFirstLap = false;
 
     [SerializeField, Min(0.0f)] private float startingPositionSidewaysOffset;
     [SerializeField, Range(0.0f, 180.0f)] private float startingRotationForEpisode;
@@ -95,10 +98,10 @@ public class DriveYourselfAgent : Agent
             float rawTargetSpeed = Academy.Instance.EnvironmentParameters.GetWithDefault("target_speed", 50.0f);
             difficultyRatio = Academy.Instance.EnvironmentParameters.GetWithDefault("difficulty_ratio", 1.0f);
             DtCRewardPercent = Academy.Instance.EnvironmentParameters.GetWithDefault("dtc_weight", 0.33f) * 100f;
-            targetSpeed = Mathf.Max(20.0f, rawTargetSpeed * difficultyRatio);
+            float minRatio = minCurriculumTrainingSpeed / Mathf.Max(rawTargetSpeed, 1.0f);
+            effectiveRatio = Mathf.Clamp(Mathf.Max(difficultyRatio, minRatio), 0.0f, 1.0f);
+            targetSpeed = Mathf.Max(rawTargetSpeed * effectiveRatio, 10.0f);
         }
-
-        speedRewardPercent = 100f - DtCRewardPercent;
 
         // Debug.Log($"[Agent Setup] Name: {transform.name} | Target Speed: {targetSpeed} | DtC %: {DtCRewardPercent}");
 
@@ -231,7 +234,7 @@ public class DriveYourselfAgent : Agent
         }
 
         float updateDiff = Time.fixedDeltaTime;
-        float currentAccPerSecond = vehicleData.GetAccelleration() / updateDiff;
+        //float currentAccPerSecond = vehicleData.GetAccelleration() / updateDiff;
         //float currentAccOffset = Mathf.Abs(currentAccPerSecond) - maxAllowedSafeAcc;
 
         float acc = 0.0f;
@@ -296,18 +299,20 @@ public class DriveYourselfAgent : Agent
                 float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
                 float baseReward = deltaProgress * normalization;
                 float speedMultiplier = 0.0f;
+                float speedError = currentSpeed - targetSpeed;
 
                 // Speed
-                if (currentSpeed > targetSpeed && currentSpeed > 0.1f)
+                if (speedError > 0.0f)
                 {
-                    speedMultiplier = targetSpeed / currentSpeed;
+                    speedMultiplier = Mathf.Exp(-(speedError * speedError) / (2 * 5.0f * 5.0f));
                 }
                 else
                 {
-                    float ratio = currentSpeed / targetSpeed;
+                    float ratio = currentSpeed / Mathf.Max(targetSpeed, 1.0f);
                     speedMultiplier = (ratio * ratio);
-                    if (ratio > 0.95f) speedMultiplier *= 1.2f;
+                    if (ratio > 0.95f) speedMultiplier *= 1.1f;
                 }
+                float clampedSpeedMult = Mathf.Max(speedMultiplier, 0.1f);
 
                 // Acceleration
                 /*
@@ -346,17 +351,16 @@ public class DriveYourselfAgent : Agent
                 */
 
                 // Distance to Center
+                float weightRatio = DtCRewardPercent / 100.0f;
                 float safeDist = Mathf.Max(maxAllowedRewardDtc, 1.0f);
-                float dtcSigma = safeDist / 3.5f;
+                float dtcSigma = Mathf.Lerp(safeDist, 0.5f, weightRatio);
                 float bellCurveDtC = Mathf.Exp(-(currentDtC * currentDtC) / (2 * dtcSigma * dtcSigma));
-
-                float strictness = DtCRewardPercent / 100.0f;
-                float safetyMultiplier = Mathf.Lerp(1.0f, bellCurveDtC, strictness);
+                float safetyMultiplier = Mathf.Lerp(1.0f, bellCurveDtC, weightRatio);
+                float clampedSafetyMult = Mathf.Max(safetyMultiplier, 0.1f);
                 //Debug.Log("Reward DtC: " + DtCReward);
 
-
                 // Final Reward
-                float finalReward = baseReward * speedMultiplier * safetyMultiplier;
+                float finalReward = baseReward * clampedSpeedMult * clampedSafetyMult;
                 AddReward(finalReward);
 
                 episodeProgressReward += finalReward;
@@ -403,6 +407,7 @@ public class DriveYourselfAgent : Agent
         var stats = Academy.Instance.StatsRecorder;
         //Debug.Log("Total Reward: " + episodeProgressReward);
 
+        stats.Add("Custom/Effective Difficulty", effectiveRatio, StatAggregationMethod.Average);
         stats.Add("Custom/Laps Completed", lapsCompleted, StatAggregationMethod.Average);
         stats.Add("Custom/Total Progress Reward", episodeProgressReward, StatAggregationMethod.Average);
         stats.Add("Custom/Total Speed Reward", episodeSpeedReward, StatAggregationMethod.Average);
