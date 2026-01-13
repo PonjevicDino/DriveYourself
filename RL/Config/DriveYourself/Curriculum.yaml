@@ -2,7 +2,7 @@ environment_parameters:
   difficulty_ratio:
     curriculum:
       # --- PHASE 1: CRAWLING (Learning to Steer) ---
-      - name: Lesson0_Start
+      - name: Lesson0
         completion_criteria:
           measure: progress
           behavior: TestModel
@@ -11,7 +11,7 @@ environment_parameters:
           threshold: 0.10
         value: 0.40
 
-      - name: Lesson1_Basic
+      - name: Lesson1
         completion_criteria:
           measure: progress
           behavior: TestModel
@@ -20,7 +20,7 @@ environment_parameters:
           threshold: 0.15
         value: 0.45
 
-      - name: Lesson2_Moving
+      - name: Lesson2
         completion_criteria:
           measure: progress
           behavior: TestModel
@@ -30,7 +30,7 @@ environment_parameters:
         value: 0.50
 
       # --- PHASE 2: CRUISING (Learning Momentum) ---
-      - name: Lesson3_PickUpPace
+      - name: Lesson3
         completion_criteria:
           measure: progress
           behavior: TestModel
@@ -39,7 +39,7 @@ environment_parameters:
           threshold: 0.25
         value: 0.56
 
-      - name: Lesson4_HalfwayThere
+      - name: Lesson4
         completion_criteria:
           measure: progress
           behavior: TestModel
@@ -48,7 +48,7 @@ environment_parameters:
           threshold: 0.30
         value: 0.62
 
-      - name: Lesson5_Cruising
+      - name: Lesson5
         completion_criteria:
           measure: progress
           behavior: TestModel
@@ -58,7 +58,7 @@ environment_parameters:
         value: 0.68
 
       # --- PHASE 3: RACING (Learning Braking) ---
-      - name: Lesson6_PickingUpSpeed
+      - name: Lesson6
         completion_criteria:
           measure: progress
           behavior: TestModel
@@ -67,7 +67,7 @@ environment_parameters:
           threshold: 0.50
         value: 0.75
 
-      - name: Lesson7_Fast
+      - name: Lesson7
         completion_criteria:
           measure: progress
           behavior: TestModel
@@ -76,7 +76,7 @@ environment_parameters:
           threshold: 0.60
         value: 0.85
 
-      - name: Lesson8_GraduationExam
+      - name: Lesson8
         completion_criteria:
           measure: progress
           behavior: TestModel
@@ -86,5 +86,5 @@ environment_parameters:
         value: 0.92
 
       # --- PHASE 4: REALITY ---
-      - name: Lesson9_FullPower
+      - name: Lesson9
         value: 1.0
