@@ -422,6 +422,10 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: useNOS
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: useTurbo
       value: 0
       objectReference: {fileID: 0}
@@ -434,16 +438,36 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: finalRatio
+      value: 3.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: steerAngle
       value: 40
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: COMAssister
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: autoReverse
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: brakeTorque
+      value: 1500
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: ABSThreshold
       value: 0.33
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: maxEngineRPM
+      value: 6000
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: minEngineRPM
+      value: 750
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: steeringType
@@ -455,7 +479,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: useEngineHeat
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: useRevLimiter
@@ -467,7 +491,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: gearShiftUpRPM
-      value: 5000
+      value: 3000
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: steeringHelper
@@ -479,7 +503,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: maxEngineTorque
-      value: 1200
+      value: 500
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: useExhaustFlame
@@ -491,7 +515,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: gearShiftDownRPM
-      value: 1750
+      value: 1250
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: interiorLightsOn
@@ -520,6 +544,10 @@ PrefabInstance:
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: lowBeamHeadLightsOn
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: maxEngineTorqueAtRPM
+      value: 1500
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: useCollisionParticles
@@ -554,40 +582,124 @@ PrefabInstance:
       value: 90
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[0].maxRatio
+      value: 5.35
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[0].maxSpeed
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[1].maxRatio
+      value: 3.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[1].maxSpeed
+      value: 40
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[2].maxRatio
+      value: 2.66
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[2].maxSpeed
+      value: 60
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[3].maxRatio
+      value: 2.23
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[3].maxSpeed
+      value: 180
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[4].maxRatio
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[4].maxSpeed
+      value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[5].maxRatio
+      value: 1.85
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[5].maxSpeed
+      value: 170
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[0].targetSpeedForNextGear
+      value: 15
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[1].targetSpeedForNextGear
+      value: 30
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[2].targetSpeedForNextGear
+      value: 45
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[3].targetSpeedForNextGear
+      value: 60
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[4].targetSpeedForNextGear
+      value: 75
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gears.Array.data[5].targetSpeedForNextGear
+      value: 90
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: engineTorqueCurve.m_Curve.Array.data[0].time
+      value: 750
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: engineTorqueCurve.m_Curve.Array.data[1].time
+      value: 1500
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: engineTorqueCurve.m_Curve.Array.data[2].time
+      value: 6000
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: engineTorqueCurve.m_Curve.Array.data[0].value
-      value: 600
+      value: 250
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: engineTorqueCurve.m_Curve.Array.data[1].value
-      value: 1200
+      value: 500
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: engineTorqueCurve.m_Curve.Array.data[2].value
-      value: 800
+      value: 333.33334
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: engineTorqueCurve.m_Curve.Array.data[0].inSlope
-      value: 0.12765957
+      value: 0.33333334
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: engineTorqueCurve.m_Curve.Array.data[1].inSlope
-      value: -0.016170211
+      value: 0.14814815
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: engineTorqueCurve.m_Curve.Array.data[2].inSlope
-      value: -0.16
+      value: -0.037037034
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: engineTorqueCurve.m_Curve.Array.data[0].outSlope
-      value: 0.12765957
+      value: 0.33333334
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: engineTorqueCurve.m_Curve.Array.data[1].outSlope
-      value: -0.016170211
+      value: 0.14814815
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: engineTorqueCurve.m_Curve.Array.data[2].outSlope
-      value: -0.16
+      value: -0.037037034
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884787, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1073,6 +1185,7 @@ MonoBehaviour:
   maxAllowedRewardDtc: 4
   DtCRewardPercent: 66
   minCurriculumTrainingSpeed: 40
+  steeringSpeed: 0.75
   endEpisodeAfterCompletedLaps: 1
   endEpisodeCarYPosition: -2
   endEpisodeCarStuckSeconds: 30

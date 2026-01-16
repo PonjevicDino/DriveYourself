@@ -41,6 +41,8 @@ public class DriveYourselfAgent : Agent
 
     [Header("Speeds")]
     [SerializeField] private float minCurriculumTrainingSpeed = 40.0f;
+    [SerializeField] private float steeringSpeed = 0.75f; // time from full lock to center
+    private float currentSteeringAngle = 0.0f;
 
     [Header("EndEpisodeConditions")]
     [SerializeField, Min(1)] private int endEpisodeAfterCompletedLaps = 1;
@@ -68,6 +70,10 @@ public class DriveYourselfAgent : Agent
         X,
         Z
     }
+
+    float limitStrict = 0.5f;
+    float exponentStrict = 2.0f;
+    float exponentLoose = 20.0f;
 
     void Start()
     {
@@ -260,13 +266,13 @@ public class DriveYourselfAgent : Agent
         }
 
         // Steering check
-        float steeringChange = Mathf.Abs(actions.ContinuousActions[1] - previousSteerInput);
-        previousSteerInput = actions.ContinuousActions[1];
+        float targetSteer = actions.ContinuousActions[1];
+        currentSteeringAngle = Mathf.MoveTowards(currentSteeringAngle, targetSteer, (1 / steeringSpeed) * Time.fixedDeltaTime);
 
         // Move
         carController.throttleInput = acc;
         carController.brakeInput = brk;
-        carController.steerInput = actions.ContinuousActions[1];
+        carController.steerInput = currentSteeringAngle;
 
 
         // Input Text
@@ -280,8 +286,8 @@ public class DriveYourselfAgent : Agent
         // Rewards
         //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
         float currentProgress = vehicleData.GetProgress();
-        float deltaProgress = Mathf.Max(0.0f, currentProgress - lastLapProgress);
-        if (startedFirstLap && (deltaProgress > 0.0f || (vehicleData.GetLap() > lastLap && currentProgress < 50.0f)))
+        float deltaProgress = Mathf.Max(0.001f, currentProgress - lastLapProgress);
+        if (startedFirstLap && (deltaProgress > 0.001f || (vehicleData.GetLap() > lastLap && currentProgress < 50.0f)))
         {
             if (currentProgress < 50.0f)
             {
@@ -289,19 +295,16 @@ public class DriveYourselfAgent : Agent
             }
             lastLapProgress = currentProgress;
 
-            if (lastLap > endEpisodeAfterCompletedLaps)
-            {
-                InjectStats();
-                EndEpisode();
-            }
-            else if (lastLap > 0)
+            if (lastLap > 0)
             {
                 //Debug.Log("AGENT Progress: " + lastLap + ", Progress: " + lastLapProgress + "%");
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
                 float currentSpeed = vehicleData.GetSpeed();
                 float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
+
                 float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
+
                 float baseReward = deltaProgress * normalization;
                 float speedMultiplier = 0.0f;
                 float speedError = currentSpeed - targetSpeed;
@@ -357,28 +360,23 @@ public class DriveYourselfAgent : Agent
 
                 // Distance to Center
                 float weightRatio = DtCRewardPercent / 100.0f;
-                float safeDist = Mathf.Max(maxAllowedRewardDtc, 1.0f);
-                float dtcSigma = Mathf.Lerp(safeDist, 0.5f, weightRatio);
-                float bellCurveDtC = Mathf.Exp(-(currentDtC * currentDtC) / (2 * dtcSigma * dtcSigma));
+                float limitLoose = maxAllowedRewardDtc;
+                float currentLimit = Mathf.Lerp(limitLoose, limitStrict, weightRatio);
+                float currentExponent = Mathf.Lerp(exponentLoose, exponentStrict, weightRatio);
+                float distRatio = currentDtC / currentLimit;
+                float safetyBase = 1.0f - Mathf.Pow(distRatio, currentExponent);
+                float safetyScore = Mathf.Max(0.0f, safetyBase);
 
                 Transform nextSegment = vehicleData.GetNextRoadSegment(vehicleData.GetRoadSegment()).transform;
                 Vector3 roadDirection = (nextSegment.position - carController.transform.position).normalized;
                 float angleError = Vector3.Angle(carController.transform.forward, roadDirection);
                 float alignmentFactor = Mathf.Clamp01(1.0f - (angleError / 30.0f));
 
-                float safetyMultiplier = bellCurveDtC * Mathf.Lerp(1.0f, alignmentFactor, weightRatio);
-                float clampedSafetyMult = Mathf.Max(safetyMultiplier, 0.1f);
+                float safetyMultiplier = safetyScore * Mathf.Lerp(1.0f, alignmentFactor, weightRatio);
                 //Debug.Log("Reward DtC: " + DtCReward);
 
-                // Steering
-                float stabilityPenalty = 0.0f;
-                if (weightRatio > 0.5f)
-                {
-                    stabilityPenalty = steeringChange * 0.05f * weightRatio;
-                }
-
                 // Final Reward
-                float finalReward = (baseReward * clampedSpeedMult * clampedSafetyMult) - stabilityPenalty;
+                float finalReward = (baseReward * clampedSpeedMult * safetyMultiplier);
                 AddReward(finalReward);
 
                 episodeProgressReward += finalReward;
@@ -386,6 +384,12 @@ public class DriveYourselfAgent : Agent
                 episodeDtCReward += safetyMultiplier;
                 episodeSpeedDeviation += Mathf.Abs(targetSpeed - currentSpeed);
                 episodeDtCDeviation += currentDtC;
+
+                if (lastLap > endEpisodeAfterCompletedLaps)
+                {
+                    InjectStats();
+                    EndEpisode();
+                }
             }
         }
         else if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
