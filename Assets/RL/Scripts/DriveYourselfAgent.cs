@@ -194,6 +194,10 @@ public class DriveYourselfAgent : Agent
         sensor.AddObservation(vehicleData.GetAccelleration());
         //sensor.AddObservation(vehicleData.GetJerk());
         sensor.AddObservation(vehicleData.GetDtC());
+        sensor.AddObservation(currentSteeringAngle / carController.steerAngle);
+
+        Vector3 localVelocity = carController.transform.InverseTransformDirection(carRb.linearVelocity);
+        sensor.AddObservation(localVelocity.x / 20.0f); // assuming 20 m/s max slide speed
 
         GameObject currentSegment = vehicleData.GetRoadSegment();
         switch (currentSegment.name.Split("_")[1])
@@ -374,6 +378,9 @@ public class DriveYourselfAgent : Agent
 
                 float safetyMultiplier = safetyScore * Mathf.Lerp(1.0f, alignmentFactor, weightRatio);
                 //Debug.Log("Reward DtC: " + DtCReward);
+
+                float corneringPenalty = 0.0f;
+                float absSteer = Mathf.Abs(currentSteeringAngle) / carController.steerAngle;
 
                 // Final Reward
                 float finalReward = (baseReward * clampedSpeedMult * safetyMultiplier);
