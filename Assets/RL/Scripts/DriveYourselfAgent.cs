@@ -191,9 +191,13 @@ public class DriveYourselfAgent : Agent
         sensor.AddObservation(DtCRewardPercent / 100f);
 
         sensor.AddObservation(vehicleData.GetSpeed());
+        sensor.AddObservation((vehicleData.GetSpeed() - targetSpeed) / 100.0f);
         sensor.AddObservation(vehicleData.GetAccelleration());
         //sensor.AddObservation(vehicleData.GetJerk());
         sensor.AddObservation(vehicleData.GetDtC());
+
+        sensor.AddObservation(carController.throttleInput);
+        sensor.AddObservation(carController.brakeInput);
         sensor.AddObservation(currentSteeringAngle / carController.steerAngle);
 
         Vector3 localVelocity = carController.transform.InverseTransformDirection(carRb.linearVelocity);
@@ -307,13 +311,19 @@ public class DriveYourselfAgent : Agent
                 float currentSpeed = vehicleData.GetSpeed();
                 float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
 
+                // Progress
+                float progressCapRatio = 1.0f;
+                if (currentSpeed > targetSpeed)
+                {
+                    progressCapRatio = targetSpeed / currentSpeed;
+                }
+                float cappedDeltaProgress = deltaProgress * progressCapRatio;
                 float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
-
                 float baseReward = deltaProgress * normalization;
-                float speedMultiplier = 0.0f;
-                float speedError = currentSpeed - targetSpeed;
 
                 // Speed
+                float speedMultiplier = 0.0f;
+                float speedError = currentSpeed - targetSpeed;
                 if (speedError > 0.0f)
                 {
                     speedMultiplier = Mathf.Exp(-(speedError * speedError) / (2 * 5.0f * 5.0f));
@@ -368,22 +378,25 @@ public class DriveYourselfAgent : Agent
                 float currentLimit = Mathf.Lerp(limitLoose, limitStrict, weightRatio);
                 float currentExponent = Mathf.Lerp(exponentLoose, exponentStrict, weightRatio);
                 float distRatio = currentDtC / currentLimit;
-                float safetyBase = 1.0f - Mathf.Pow(distRatio, currentExponent);
-                float safetyScore = Mathf.Max(0.0f, safetyBase);
-
-                Transform nextSegment = vehicleData.GetNextRoadSegment(vehicleData.GetRoadSegment()).transform;
-                Vector3 roadDirection = (nextSegment.position - carController.transform.position).normalized;
-                float angleError = Vector3.Angle(carController.transform.forward, roadDirection);
-                float alignmentFactor = Mathf.Clamp01(1.0f - (angleError / 30.0f));
-
-                float safetyMultiplier = safetyScore * Mathf.Lerp(1.0f, alignmentFactor, weightRatio);
+                float safetyMultiplier = 0.0f;
+                if (distRatio < 1.0f)
+                {
+                    float safetyBase = 1.0f - Mathf.Pow(distRatio, currentExponent);
+                    Transform nextSegment = vehicleData.GetNextRoadSegment(vehicleData.GetRoadSegment()).transform;
+                    Vector3 roadDirection = (nextSegment.position - carController.transform.position).normalized;
+                    float angleError = Vector3.Angle(carController.transform.forward, roadDirection);
+                    float alignmentFactor = Mathf.Clamp01(1.0f - (angleError / 30.0f));
+                    safetyMultiplier = safetyBase * Mathf.Lerp(1.0f, alignmentFactor, weightRatio);
+                }
                 //Debug.Log("Reward DtC: " + DtCReward);
 
-                float corneringPenalty = 0.0f;
-                float absSteer = Mathf.Abs(currentSteeringAngle) / carController.steerAngle;
+                // Smoothness
+                float throttleChange = Mathf.Abs(acc - carController.throttleInput);
+                float brakeChange = Mathf.Abs(brk - carController.brakeInput);
+                float pedalPenalty = (throttleChange + brakeChange) * 0.05f;
 
                 // Final Reward
-                float finalReward = (baseReward * clampedSpeedMult * safetyMultiplier);
+                float finalReward = (baseReward * clampedSpeedMult * safetyMultiplier) - pedalPenalty;
                 AddReward(finalReward);
 
                 episodeProgressReward += finalReward;
