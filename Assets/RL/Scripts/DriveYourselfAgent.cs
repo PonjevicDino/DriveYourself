@@ -405,7 +405,7 @@ public class DriveYourselfAgent : Agent
                 episodeSpeedDeviation += Mathf.Abs(targetSpeed - currentSpeed);
                 episodeDtCDeviation += currentDtC;
 
-                if (lastLap > endEpisodeAfterCompletedLaps)
+                if (lastLap > endEpisodeAfterCompletedLaps && currentProgress > 33.33f)
                 {
                     InjectStats();
                     EndEpisode();
