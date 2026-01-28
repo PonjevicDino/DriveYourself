@@ -191,17 +191,16 @@ public class DriveYourselfAgent : Agent
         sensor.AddObservation(DtCRewardPercent / 100f);
 
         sensor.AddObservation(vehicleData.GetSpeed());
-        sensor.AddObservation((vehicleData.GetSpeed() - targetSpeed) / 100.0f);
-        sensor.AddObservation(vehicleData.GetAccelleration());
+        sensor.AddObservation(vehicleData.GetAccelleration() / 10f);
         //sensor.AddObservation(vehicleData.GetJerk());
-        sensor.AddObservation(vehicleData.GetDtC());
+        sensor.AddObservation(vehicleData.GetDtC() / maxAllowedRewardDtc);
 
         sensor.AddObservation(carController.throttleInput);
         sensor.AddObservation(carController.brakeInput);
         sensor.AddObservation(currentSteeringAngle / carController.steerAngle);
 
         Vector3 localVelocity = carController.transform.InverseTransformDirection(carRb.linearVelocity);
-        sensor.AddObservation(localVelocity.x / 20.0f); // assuming 20 m/s max slide speed
+        sensor.AddObservation(localVelocity.x / 10.0f); // assuming 20 m/s max slide speed
 
         GameObject currentSegment = vehicleData.GetRoadSegment();
         switch (currentSegment.name.Split("_")[1])
@@ -305,103 +304,93 @@ public class DriveYourselfAgent : Agent
 
             if (lastLap > 0)
             {
-                //Debug.Log("AGENT Progress: " + lastLap + ", Progress: " + lastLapProgress + "%");
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
                 float currentSpeed = vehicleData.GetSpeed();
                 float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
+                float weightRatio = DtCRewardPercent / 100.0f; // 0=Speed, 1=Safety
 
-                // Progress
-                float progressCapRatio = 1.0f;
-                if (currentSpeed > targetSpeed)
-                {
-                    progressCapRatio = targetSpeed / currentSpeed;
-                }
-                float cappedDeltaProgress = deltaProgress * progressCapRatio;
-                float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
-                float baseReward = deltaProgress * normalization;
 
-                // Speed
-                float speedMultiplier = 0.0f;
-                float speedError = currentSpeed - targetSpeed;
-                if (speedError > 0.0f)
-                {
-                    speedMultiplier = Mathf.Exp(-(speedError * speedError) / (2 * 5.0f * 5.0f));
-                }
-                else
-                {
-                    float ratio = currentSpeed / Mathf.Max(targetSpeed, 1.0f);
-                    speedMultiplier = (ratio * ratio);
-                    if (ratio > 0.90f) speedMultiplier = 1.0f;
-                }
-                float clampedSpeedMult = Mathf.Max(speedMultiplier, 0.1f);
-
-                // Acceleration
-                /*
-                if (currentAccOffset <= 0)
-                {
-                    AddReward(1.0f * (accRewardPercent / 100.0f));
-                }
-                else
-                {
-                    float accRewardDegradeFactor = Mathf.InverseLerp(0.0f, maxAllowedRewardAcc, currentAccOffset);
-                    float accReward = (1.0f - accRewardDegradeFactor) * (accRewardPercent / 100.0f);
-                    if (!float.IsNaN(accReward))
-                    {
-                        AddReward(accReward);
-                    }
-                }
-                */
-
-                // Jerk
-                /*
-                float currentJerkPerSecond = vehicleData.GetJerk() / updateDiff;
-                float currentJerkOffset = Mathf.Abs(currentJerkPerSecond) - maxAllowedSafeJerk;
-                if (currentJerkOffset <= 0)
-                {
-                    AddReward(1.0f * (jerkRewardPercent / 100.0f));
-                }
-                else
-                {
-                    float jerkRewardDegradeFactor = Mathf.InverseLerp(0.0f, maxAllowedRewardJerk, currentJerkOffset);
-                    float jerkReward = (1.0f - jerkRewardDegradeFactor) * (accRewardPercent / 100.0f);
-                    if (!float.IsNaN(jerkReward))
-                    {
-                        AddReward(jerkReward);
-                    }
-                }
-                */
-
-                // Distance to Center
-                float weightRatio = DtCRewardPercent / 100.0f;
-                float limitLoose = maxAllowedRewardDtc;
+                // --- 1. DEFINE THE CORRIDOR (The Hard Constraint) ---
+                // DtC 0 -> 4.0m width
+                // DtC 1 -> 0.1m width
+                float limitLoose = maxAllowedRewardDtc; // 4.0
+                float limitStrict = 0.1f;               // 0.1
                 float currentLimit = Mathf.Lerp(limitLoose, limitStrict, weightRatio);
-                float currentExponent = Mathf.Lerp(exponentLoose, exponentStrict, weightRatio);
-                float distRatio = currentDtC / currentLimit;
-                float safetyMultiplier = 0.0f;
-                if (distRatio < 1.0f)
-                {
-                    float safetyBase = 1.0f - Mathf.Pow(distRatio, currentExponent);
-                    Transform nextSegment = vehicleData.GetNextRoadSegment(vehicleData.GetRoadSegment()).transform;
-                    Vector3 roadDirection = (nextSegment.position - carController.transform.position).normalized;
-                    float angleError = Vector3.Angle(carController.transform.forward, roadDirection);
-                    float alignmentFactor = Mathf.Clamp01(1.0f - (angleError / 30.0f));
-                    safetyMultiplier = safetyBase * Mathf.Lerp(1.0f, alignmentFactor, weightRatio);
-                }
-                //Debug.Log("Reward DtC: " + DtCReward);
 
-                // Smoothness
+                // CHECK: Are we alive?
+                // If we stepped outside the corridor, the reward for this step is ZERO.
+                if (currentDtC > currentLimit)
+                {
+                    // "Death" Penalty to discourage touching the lava
+                    // We give a small negative reward instead of just 0 to say "This is bad"
+                    AddReward(-0.01f);
+
+                    // Log Stats (Optional)
+                    episodeDtCDeviation += currentDtC;
+                    return; // Skip the rest of the reward calculation
+                }
+
+
+                // --- 2. CALCULATE BASE COMPONENTS ---
+
+                // A. Safety Score (0.0 to 1.0)
+                // Even inside the corridor, being closer to center is better.
+                // We use a linear ratio: Center=1.0, Edge=0.0
+                float safetyScore = 1.0f - (currentDtC / currentLimit);
+                // Clamp just in case
+                safetyScore = Mathf.Clamp01(safetyScore);
+
+
+                // B. Speed Score (0.0 to 1.0)
+                // How close are we to target speed?
+                float speedError = Mathf.Abs(currentSpeed - targetSpeed);
+                // Tolerance: +/- 10% of target speed is "Perfect" (1.0)
+                float tolerance = Mathf.Max(targetSpeed * 0.1f, 5.0f);
+
+                float speedScore = 0.0f;
+                if (speedError <= tolerance)
+                {
+                    speedScore = 1.0f;
+                }
+                else
+                {
+                    // Falloff outside tolerance
+                    // Example: Error 20km/h -> Score drops significantly
+                    float extraError = speedError - tolerance;
+                    speedScore = Mathf.Exp(-(extraError * extraError) / (2 * 10.0f * 10.0f));
+                }
+
+
+                // --- 3. BLEND BASED ON PRIORITY ---
+                // Now we decide what matters.
+                // If Weight = 1.0: Reward is 100% Safety Score. (Speed doesn't matter)
+                // If Weight = 0.0: Reward is 100% Speed Score. (Centering doesn't matter, as long as inside 4m)
+
+                float finalMultiplier = Mathf.Lerp(speedScore, safetyScore, weightRatio);
+
+
+                // --- 4. APPLY TO PROGRESS ---
+                // We multiply the progress (distance traveled) by our Quality Multiplier.
+                // If you drive 1 meter but have bad Speed/Safety (depending on weight),
+                // it counts as moving 0 meters (wasted effort).
+
+                float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
+                float finalReward = deltaProgress * normalization * finalMultiplier;
+
+
+                // --- 5. ANTI-OSCILLATION (Pedal Smoothing) ---
                 float throttleChange = Mathf.Abs(acc - carController.throttleInput);
                 float brakeChange = Mathf.Abs(brk - carController.brakeInput);
                 float pedalPenalty = (throttleChange + brakeChange) * 0.05f;
 
-                // Final Reward
-                float finalReward = (baseReward * clampedSpeedMult * safetyMultiplier) - pedalPenalty;
-                AddReward(finalReward);
+
+                // Final Sum
+                AddReward(finalReward - pedalPenalty);
 
                 episodeProgressReward += finalReward;
-                episodeSpeedReward += speedMultiplier;
-                episodeDtCReward += safetyMultiplier;
+                episodeSpeedReward += speedScore;
+                episodeDtCReward += safetyScore;
                 episodeSpeedDeviation += Mathf.Abs(targetSpeed - currentSpeed);
                 episodeDtCDeviation += currentDtC;
 
