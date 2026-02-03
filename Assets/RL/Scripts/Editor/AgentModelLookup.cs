@@ -2,8 +2,6 @@ using UnityEngine;
 using UnityEditor;
 using System.IO;
 using System.Text.RegularExpressions;
-using System.Linq;
-using System.Collections.Generic;
 
 public class AgentModelLookup : EditorWindow
 {
@@ -93,11 +91,11 @@ public class AgentModelLookup : EditorWindow
         }
 
         string cleanPrefix = runPrefix.Trim();
-        string cleanModelFolder = modelFolderName.Trim();
+        string cleanModelName = modelFolderName.Trim();
 
         Log($"Starting... Looking for Prefix: '{cleanPrefix}' inside '{sourceFolder}'");
 
-        string pattern = $@"^{Regex.Escape(cleanPrefix)}-Agent_(\d+)[-_](S\d+)-(W\d+)$";
+        string pattern = $@"^{Regex.Escape(cleanPrefix)}-Agent_(\d+)[-_](S\d+)-(W\d+)-(A\d+)-(Sm\d+)$";
 
         Log($"Using Flexible Regex: {pattern}");
         Regex nameRegex = new Regex(pattern);
@@ -118,38 +116,32 @@ public class AgentModelLookup : EditorWindow
                 string agentID = match.Groups[1].Value;
                 string speed = match.Groups[2].Value;
                 string weight = match.Groups[3].Value;
+                string acc = match.Groups[4].Value;
+                string smooth = match.Groups[5].Value;
 
-                string innerPath = Path.Combine(dirPath, cleanModelFolder);
-                if (Directory.Exists(innerPath))
+                string expectedOnnxPath = Path.Combine(dirPath, cleanModelName + ".onnx");
+
+                if (File.Exists(expectedOnnxPath))
                 {
-                    FileInfo bestFile = GetHighestVersionOnnx(innerPath);
-                    if (bestFile != null)
-                    {
-                        // Create Target Path
-                        string finalTargetDir = Path.Combine(targetFolder, cleanPrefix);
-                        if (!Directory.Exists(finalTargetDir)) Directory.CreateDirectory(finalTargetDir);
+                    string finalTargetDir = Path.Combine(targetFolder, cleanPrefix);
+                    if (!Directory.Exists(finalTargetDir)) Directory.CreateDirectory(finalTargetDir);
 
-                        string newName = $"{agentID}-{speed}-{weight}.onnx";
-                        string destPath = Path.Combine(finalTargetDir, newName);
+                    string newName = $"Agent_{agentID}-{speed}-{weight}-{acc}-{smooth}.onnx";
+                    string destPath = Path.Combine(finalTargetDir, newName);
 
-                        File.Copy(bestFile.FullName, destPath, true);
-                        Log($"SUCCESS: {dirName} -> {newName}");
-                        successCount++;
-                    }
-                    else
-                    {
-                        Log($"FAIL: No .onnx files found in {innerPath}");
-                    }
+                    File.Copy(expectedOnnxPath, destPath, true);
+                    Log($"SUCCESS: {dirName} -> {newName}");
+                    successCount++;
                 }
                 else
                 {
-                    Log($"FAIL: Could not find folder '{cleanModelFolder}' inside '{dirName}'");
+                    Log($"FAIL: Found folder '{dirName}' but missing '{cleanModelName}.onnx' inside it.");
                 }
             }
 
             else if (dirName.StartsWith(cleanPrefix))
             {
-                Log($"FAIL Regex: '{dirName}' still mismatch. Pattern expects: {cleanPrefix}-Agent_[Num]-[Speed]-[Weight]");
+                Log($"FAIL Regex: '{dirName}' skipped. Pattern mismatch.");
             }
         }
 
@@ -159,30 +151,5 @@ public class AgentModelLookup : EditorWindow
             EditorUtility.DisplayDialog("Success", $"Processed {successCount} Agents.", "OK");
         }
         AssetDatabase.Refresh();
-    }
-
-    private FileInfo GetHighestVersionOnnx(string folderPath)
-    {
-        DirectoryInfo dir = new DirectoryInfo(folderPath);
-        FileInfo[] files = dir.GetFiles("*.onnx");
-
-        if (files.Length == 0) return null;
-
-        var sorted = files
-            .Select(f => new { File = f, Step = ExtractStepNumber(f.Name) })
-            .OrderByDescending(x => x.Step)
-            .ToList();
-
-        return sorted.First().File;
-    }
-
-    private long ExtractStepNumber(string fileName)
-    {
-        Match m = Regex.Match(fileName, @"(\d+)(?=\.onnx$)");
-        if (m.Success && long.TryParse(m.Value, out long result))
-        {
-            return result;
-        }
-        return -1;
     }
 }

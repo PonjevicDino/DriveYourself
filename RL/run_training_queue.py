@@ -21,6 +21,8 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index):
         run_id = agent_data.get("id", "Unknown_Agent")
         speed = agent_data.get("speed", 50)
         dtc_weight = agent_data.get("dtc_weight", 0.5)
+        acc_time = agent_data.get("acc_time", 10.0)
+        smooth_threshold = agent_data.get("smooth_threshold", 1.0)
 
         assigned_port = BASE_PORT + (worker_index * PORT_GAP)
 
@@ -51,6 +53,8 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index):
         merged_params = curriculum_data.copy()
         merged_params["target_speed"] = float(speed)
         merged_params["dtc_weight"] = float(dtc_weight)
+        merged_params["acc_time"] = float(acc_time)
+        merged_params["smooth_threshold"] = float(smooth_threshold)
 
         local_config["environment_parameters"] = merged_params
 

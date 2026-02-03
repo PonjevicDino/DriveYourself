@@ -14,10 +14,16 @@ public class DriveYourselfAgent : Agent
     private float episodeProgressReward;
     private float episodeSpeedReward;
     private float episodeSpeedDeviation;
+    private float episodeMaxAcceleration;
+    private float episodeSmoothnessPenalty;
     private float episodeDtCReward;
     private float episodeDtCDeviation;
     private float effectiveRatio = 0.0f;
-    private float previousSteerInput = 0.0f;
+    private float lastThrottleInput = 0.0f;
+    private float lastBrakeInput = 0.0f;
+    private float lastSteeringAction = 0.0f;
+    private float accelTime0to100 = 10.0f;
+    private float inputSmoothnessThreshold = 0.5f;
 
     [SerializeField] private int lookAheadSegments;
 
@@ -105,10 +111,16 @@ public class DriveYourselfAgent : Agent
             float rawTargetSpeed = Academy.Instance.EnvironmentParameters.GetWithDefault("target_speed", 50.0f);
             difficultyRatio = Academy.Instance.EnvironmentParameters.GetWithDefault("difficulty_ratio", 1.0f);
             DtCRewardPercent = Academy.Instance.EnvironmentParameters.GetWithDefault("dtc_weight", 0.33f) * 100f;
+            accelTime0to100 = Academy.Instance.EnvironmentParameters.GetWithDefault("acc_time", 10.0f);
+            inputSmoothnessThreshold = Academy.Instance.EnvironmentParameters.GetWithDefault("smooth_threshold", 0.5f);
             float minRatio = minCurriculumTrainingSpeed / Mathf.Max(rawTargetSpeed, 1.0f);
             effectiveRatio = Mathf.Clamp(Mathf.Max(difficultyRatio, minRatio), 0.0f, 1.0f);
             targetSpeed = Mathf.Max(rawTargetSpeed * effectiveRatio, 10.0f);
         }
+
+        lastThrottleInput = 0.0f;
+        lastBrakeInput = 0.0f;
+        lastSteeringAction = 0.0f;
 
         // Debug.Log($"[Agent Setup] Name: {transform.name} | Target Speed: {targetSpeed} | DtC %: {DtCRewardPercent}");
 
@@ -117,6 +129,8 @@ public class DriveYourselfAgent : Agent
         episodeSpeedDeviation = 0.0f;
         episodeDtCReward = 0.0f;
         episodeDtCDeviation = 0.0f;
+        episodeMaxAcceleration = 0.0f;
+        episodeSmoothnessPenalty = 0.0f;
 
         ForceDisableAllParticles();
 
@@ -189,6 +203,8 @@ public class DriveYourselfAgent : Agent
 
         sensor.AddObservation(targetSpeed / 150f); // 150 as the maximum Speed
         sensor.AddObservation(DtCRewardPercent / 100f);
+        sensor.AddObservation(accelTime0to100 / 20.0f);
+        sensor.AddObservation(inputSmoothnessThreshold);
 
         sensor.AddObservation(vehicleData.GetSpeed());
         sensor.AddObservation(vehicleData.GetAccelleration() / 10f);
@@ -277,9 +293,9 @@ public class DriveYourselfAgent : Agent
         currentSteeringAngle = Mathf.MoveTowards(currentSteeringAngle, targetSteer, (1 / steeringSpeed) * Time.fixedDeltaTime);
 
         // Move
-        carController.throttleInput = acc;
-        carController.brakeInput = brk;
-        carController.steerInput = currentSteeringAngle;
+        float currentThrottle = carController.throttleInput = acc;
+        float currentBrake = carController.brakeInput = brk;
+        float currentSteer = carController.steerInput = currentSteeringAngle;
 
 
         // Input Text
@@ -337,9 +353,7 @@ public class DriveYourselfAgent : Agent
                 // A. Safety Score (0.0 to 1.0)
                 // Even inside the corridor, being closer to center is better.
                 // We use a linear ratio: Center=1.0, Edge=0.0
-                float safetyScore = 1.0f - (currentDtC / currentLimit);
-                // Clamp just in case
-                safetyScore = Mathf.Clamp01(safetyScore);
+                float safetyScore = Mathf.Clamp01(1.0f - (currentDtC / currentLimit));
 
 
                 // B. Speed Score (0.0 to 1.0)
@@ -369,30 +383,65 @@ public class DriveYourselfAgent : Agent
 
                 float finalMultiplier = Mathf.Lerp(speedScore, safetyScore, weightRatio);
 
+                // --- 4. ACCELERATION LIMIT (The "G-Force" Check) ---
+                // Formula: 100km/h in m/s is 27.78.
+                // Max Accel (m/s^2) = 27.78 / Seconds.
+                float maxAccel = (100.0f / 3.6f) / Mathf.Max(accelTime0to100, 1.0f);
+                float currentAccel = Mathf.Abs(vehicleData.GetAccelleration()); // Get Magnitude
+                if (currentAccel > episodeMaxAcceleration)
+                {
+                    episodeMaxAcceleration = currentAccel;
+                }
+                // If we exceed the G-Force Limit, the ENTIRE reward is voided.
+                if (currentAccel > maxAccel)
+                {
+                    finalMultiplier = 0.0f;
+                }
 
-                // --- 4. APPLY TO PROGRESS ---
+
+                // --- 5. SMOOTHNESS PENALTY (The "Twitch" Check) ---
+                // Calculate how much the "feet" moved this frame
+                float deltaInput = Mathf.Abs(currentThrottle - lastThrottleInput) + Mathf.Abs(currentBrake - lastBrakeInput);
+
+                // NEW: Calculate how much the "hands" moved this frame
+                // targetSteer is the raw action from the brain (actions.ContinuousActions[1])
+                // lastSteeringAction is the raw action from the previous frame
+                float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction);
+
+                // Combine all jerky movements
+                float totalTwitch = deltaInput + deltaSteer;
+
+                // Threshold Logic:
+                // If threshold is 1.0 -> (1 - 1) = 0 multiplier -> No Penalty.
+                // If threshold is 0.0 -> (1 - 0) = 1 multiplier -> Full Penalty.
+                float smoothnessStrictness = 1.0f - Mathf.Clamp01(inputSmoothnessThreshold);
+
+                // Scale the penalty (0.1 is a reasonable weight per frame)
+                // We penalize steering twitch just as much as pedal twitch.
+                float smoothnessPenalty = totalTwitch * smoothnessStrictness * 0.1f;
+
+
+                // --- 6. APPLY TO PROGRESS ---
                 // We multiply the progress (distance traveled) by our Quality Multiplier.
                 // If you drive 1 meter but have bad Speed/Safety (depending on weight),
                 // it counts as moving 0 meters (wasted effort).
-
                 float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
                 float finalReward = deltaProgress * normalization * finalMultiplier;
 
-
-                // --- 5. ANTI-OSCILLATION (Pedal Smoothing) ---
-                float throttleChange = Mathf.Abs(acc - carController.throttleInput);
-                float brakeChange = Mathf.Abs(brk - carController.brakeInput);
-                float pedalPenalty = (throttleChange + brakeChange) * 0.05f;
-
-
-                // Final Sum
-                AddReward(finalReward - pedalPenalty);
+                // Final Sum (Subtract Smoothness Penalty)
+                finalReward -= smoothnessPenalty;
+                AddReward(finalReward);
 
                 episodeProgressReward += finalReward;
                 episodeSpeedReward += speedScore;
                 episodeDtCReward += safetyScore;
                 episodeSpeedDeviation += Mathf.Abs(targetSpeed - currentSpeed);
                 episodeDtCDeviation += currentDtC;
+                episodeSmoothnessPenalty += smoothnessPenalty;
+
+                lastThrottleInput = currentThrottle;
+                lastBrakeInput = currentBrake;
+                lastSteeringAction = currentSteer;
 
                 if (lastLap > endEpisodeAfterCompletedLaps && currentProgress > 33.33f)
                 {
@@ -445,6 +494,8 @@ public class DriveYourselfAgent : Agent
         stats.Add("Custom/Total DtC Reward", episodeDtCReward, StatAggregationMethod.Average);
         stats.Add("Custom/Avg Speed Deviation", episodeSpeedDeviation / stepCount, StatAggregationMethod.Average);
         stats.Add("Custom/Avg DtC Deviation", episodeDtCDeviation / stepCount, StatAggregationMethod.Average);
+        stats.Add("Custom/Max Acceleration", episodeMaxAcceleration, StatAggregationMethod.Average);
+        stats.Add("Custom/Total Smoothness Penalty", episodeSmoothnessPenalty, StatAggregationMethod.Average);
     }
 
     private void ForceDisableAllParticles()
