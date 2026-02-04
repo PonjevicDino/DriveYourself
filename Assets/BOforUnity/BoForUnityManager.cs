@@ -1,0 +1,420 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using BOforUnity.Scripts;
+using QuestionnaireToolkit.Scripts;
+using TMPro;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.Assertions.Must;
+using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
+using UnityEngine.UI;
+using PythonStarter = BOforUnity.Scripts.PythonStarter;
+
+namespace BOforUnity
+{
+    public class BoForUnityManager : MonoBehaviour
+    {
+        public PythonStarter pythonStarter;
+        public Optimizer optimizer;
+        public MainThreadDispatcher mainThreadDispatcher;
+        public SocketNetwork socketNetwork;
+
+        private static BoForUnityManager _instance;
+        
+        //-----------------------------------------------
+        // DESIGN PARAMETERS and DESIGN OBJECTIVES
+        public List<ParameterEntry> parameters = new List<ParameterEntry>();
+        public List<ObjectiveEntry> objectives = new List<ObjectiveEntry>();
+        //-----------------------------------------------
+        
+        //-----------------------------------------------
+        // ITERATION CONTROLLER
+        [SerializeField]
+        public int currentIteration;  // Current iteration value.
+        public int totalIterations;
+        public bool perfectRating;   // Flag indicating perfect rating.
+        public bool perfectRatingStart;  // Flag indicating the start of perfect rating.
+        public int perfectRatingIteration;
+        public bool initialized = false;
+        public bool simulationRunning = false;
+        private bool _waitingForPythonProcess = false;
+        
+        // BO Hyper-parameters
+        public int batchSize = 1;
+        public int numRestarts = 10;
+        public int rawSamples = 1024;
+        public int mcSamples = 512;
+        public int numSamplingIterations = 5; // in typical MOBO problems, this should be 2(d+1), where d is the number of objectives
+        public int numOptimizationIterations = 10;
+        public int seed = 3;
+        
+        [SerializeField] private bool enableSamplingEdit = false; // checkbox in inspector
+        
+        public bool warmStart = false;
+        public bool perfectRatingActive = false;
+        public bool perfectRatingInInitialRounds = false;
+        public string initialParametersDataPath;
+        public string initialObjectivesDataPath;
+
+        public string userId = "-1";
+        public string conditionId = "-1";
+        public string groupId = "-1";
+
+        public bool hasNewDesignParameterValues;
+        //-----------------------------------------------
+        
+        //-----------------------------------------------
+        private void Awake()
+        {
+            // If there is already an instance of this object, destroy the new one
+            if (_instance != null)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            // Mark this object as the single instance and make it persistent
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+            
+            pythonStarter = gameObject.GetComponent<PythonStarter>();
+            optimizer = gameObject.GetComponent<Optimizer>();
+            mainThreadDispatcher = gameObject.GetComponent<MainThreadDispatcher>();
+            socketNetwork = gameObject.GetComponent<SocketNetwork>();
+
+            currentIteration = 1;
+            totalIterations = numSamplingIterations + numOptimizationIterations; // set how many iterations the optimizer should run for
+        }
+        
+        void Start()
+        {
+            loadingObj.SetActive(true);
+            nextButton.SetActive(false);
+
+            initialized = false;
+            _waitingForPythonProcess = true;
+            perfectRating = false;
+            perfectRatingStart = false;
+            simulationRunning = true; // the simulation to true to prevent 
+        }
+        
+        void Update()
+        {
+            if (_waitingForPythonProcess && pythonStarter.isPythonProcessRunning && pythonStarter.isSystemStarted)
+            {
+                _waitingForPythonProcess = false;
+                PythonInitializationDone();
+            }
+        }
+        //-----------------------------------------------
+        
+        
+        // CONTROLLER SCENE
+        //-----------------------------------------------
+        public TMP_Text outputText;
+        public GameObject loadingObj;
+        public GameObject nextButton;
+
+        public GameObject welcomePanel;
+        public GameObject optimizerStatePanel;
+        
+        public bool optimizationRunning = false;
+        public bool optimizationFinished = false;
+
+        //Starts a new iteration
+        public void ButtonNextIteration()
+        {
+            loadingObj.SetActive(true); // show loading
+            nextButton.SetActive(false); // hide next button
+
+            if (currentIteration == 0)
+            {
+                welcomePanel.SetActive(false);
+                optimizerStatePanel.SetActive(false);
+                return;
+            }
+
+            var isPerfect = false;
+
+            // Check if perfect rating is active. If not skip the checks for a perfect rating.
+            if(perfectRatingActive)
+            {
+                // Check if perfect rating can be achieved in the initial rounds (also known as: "sampling phase")
+                if(perfectRatingInInitialRounds)
+                {
+                    isPerfect = IsPerfectRating();
+                }
+                // Else wait until the initial rounds are over and then check for perfect rating
+                else if (perfectRatingInInitialRounds == false && currentIteration > numSamplingIterations)
+                {
+                    isPerfect = IsPerfectRating();
+                }
+            }
+            
+            // Check if there should be another iteration of the optimization
+            if (currentIteration <= totalIterations && !isPerfect)
+            {
+                // hide the panel as the next iteration starts after scene is reloaded
+                optimizerStatePanel.SetActive(false);
+                
+                Debug.Log("--------------------------------------Current Iteration: " + currentIteration);
+
+                simulationRunning = true; // waiting for the simulation to finish
+                
+                SceneManager.LoadScene(SceneManager.GetActiveScene().name); // reload scene
+            }
+            else if (currentIteration > totalIterations || isPerfect)
+            {
+                if (isPerfect)
+                {
+                    Debug.Log(">>>>> Perfect Rating");
+                }
+                
+                Debug.Log("<<<<<<< Exiting the loop ... ");
+                Debug.Log("------------------------------------------------");
+
+                simulationRunning = false; // the simulation must be finished
+                
+                socketNetwork.SocketQuit();
+                // load a final scene or...
+                // show the End Message
+                outputText.text = "The simulation has finished!\nYou can now close the application.";
+                loadingObj.SetActive(false);
+                nextButton.SetActive(false);
+            }
+        }
+        
+        public void OptimizationStart()
+        {
+            Debug.Log("Optimization START");
+            socketNetwork.SendObjectives(); // send the current objective values to the Python process
+            hasNewDesignParameterValues = false; // the current design parameter values are obsolete
+            optimizationRunning = true;
+            simulationRunning = false;
+
+            optimizerStatePanel.SetActive(true); // show that the optimizer is running
+            loadingObj.SetActive(true);
+            nextButton.SetActive(false);
+            outputText.text = "The system is loading, please wait ...";
+        }
+        
+        public void OptimizationDone()
+        {
+            Debug.Log("Optimization DONE");
+            // ---------------
+            // now, apply the parameter value of the current iteration ...
+            hasNewDesignParameterValues = true;
+            // ---------------
+            optimizationRunning = false;
+            
+            loadingObj.SetActive(false); // hide as the optimizer has finished running
+            nextButton.SetActive(true);
+            outputText.text = "The system has finished loading.\nYou can now proceed.";
+            
+            currentIteration++; // increase iteration counter
+        }
+        
+        public void InitializationDone()
+        {
+            Debug.Log("Initialization DONE");
+            // ---------------
+            // now, apply the parameter value of the current iteration ...
+            hasNewDesignParameterValues = true;
+            // ---------------
+            optimizationRunning = false;
+            
+            initialized = true;
+            loadingObj.SetActive(false); // hide loading circle
+            nextButton.SetActive(true); // show next button
+            outputText.text = "The system has been started successfully!\nYou can now start the study.";
+        }
+        
+        private void PythonInitializationDone()
+        {
+            Debug.Log("Python Process Initialization DONE");
+            // Initialize the optimizer and socket connection ... only for Debug
+            // optimizer.DebugOptimizer();
+            // Start Optimization to receive the initialized parameter values for the first iteration
+            socketNetwork.InitSocket();
+        }
+        
+        private bool IsPerfectRating()
+        {
+            foreach (var ob in objectives)
+            {
+                if (ob.value.values.Count == 0)
+                {
+                    return false;
+                }
+                
+                if (ob.value.smallerIsBetter ?
+                        ob.value.values.Average() > ob.value.lowerBound : 
+                        ob.value.values.Average() < ob.value.upperBound)
+                {
+                    return false; // the rating is imperfect!
+                }
+            }
+            
+            Debug.Log("Could be perfect rating ...");
+            
+            switch (perfectRatingStart)
+            {
+                case false:
+                    perfectRatingStart = true;
+                    perfectRating = false;
+                    perfectRatingIteration = currentIteration; // remember the current iteration for this perfect rating
+                    break;
+                case true when currentIteration - perfectRatingIteration == 1:
+                    Debug.Log("It is a perfect rating (i.e., perfect two times in a row)!");
+                    perfectRatingStart = false;
+                    perfectRating = true; // the rating was perfect after two consecutive iterations
+                    return true;
+                default:
+                    perfectRatingStart = false; // the perfect rating was more than one iteration ago
+                    perfectRating = false;
+                    break;
+            }
+            return false;
+        }
+        
+        public void EndApplication()
+        {
+#if UNITY_EDITOR
+            EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+        }
+        //-----------------------------------------------
+        
+        
+        //--------------------------------------------
+        [Header("Location of Python executable")]
+        public bool localPython;
+        public string pythonPath;
+
+        public bool getLocalPython() { return localPython; }
+        public void setLocalPython(bool a) { localPython = a; }
+        
+        public string getPythonPath() { return pythonPath; }
+        public void setPythonPath(string newPath) 
+        {
+            if (newPath != String.Empty)
+            {
+                pythonPath = newPath;
+            }
+            //Debug.Log("Python Path set to: " + pythonPath);
+        }
+        
+        //-----------------------------------------------
+    }
+    
+            // ------------------
+        // the objective entries:
+        // ------------------
+        [System.Serializable]
+        public class ObjectiveEntry
+        {
+            public string key;
+            public ObjectiveArgs value;
+            public ObjectiveEntry(string key, ObjectiveArgs value)
+            {
+                this.key = key;
+                this.value = value;
+            }
+        }
+        
+        [System.Serializable]
+        public class ObjectiveArgs
+        {
+            /// <summary>
+            /// optSeqOrder: an integer that represents the order of this objective in a sequence of objectives
+            /// values: a List of floats that stores the values obtained for this objective in a sequence of trials.
+            /// lowerBound: a float that represents the lower bound of the acceptable range of values for this objective.
+            /// upperBound: a float that represents the upper bound of the acceptable range of values for this objective
+            /// smallerIsBetter: a bool that specifies whether a smaller value is considered better for this objective.
+            /// hasMultipleValues: a bool that specifies whether this objective should have multiple values.
+            /// </summary>
+            [HideInInspector] public int optSeqOrder;
+            public int numberOfSubMeasures;
+            public List<float> values = new List<float>();
+            public float lowerBound = 0.0f;
+            public float upperBound = 0.0f;
+            public bool smallerIsBetter = false;
+
+            /// <summary>
+            /// ObjectiveArgs(): a constructor that creates an empty instance of the ObjectiveArgs class.
+            /// </summary>
+            public ObjectiveArgs() { }
+
+            /// <summary>
+            /// ObjectiveArgs(lowerBound, upperBound, smallerIsBetter): a constructor that creates an instance of the
+            /// ObjectiveArgs class and sets the lower and upper bounds of the acceptable range of values, as well as the
+            /// smallerIsBetter flag.
+            /// </summary>
+            /// <param name="lowerBound"></param>
+            /// <param name="upperBound"></param>
+            /// <param name="smallerIsBetter"></param>
+            /// <param name="numberOfSubMeasures"></param>
+            public ObjectiveArgs(float lowerBound, float upperBound, bool smallerIsBetter, int numberOfSubMeasures)
+            {
+                this.lowerBound = lowerBound;
+                this.upperBound = upperBound;
+                this.smallerIsBetter = smallerIsBetter;
+                this.numberOfSubMeasures = numberOfSubMeasures;
+            }
+        }
+        // ------------------
+        
+        
+        // ------------------
+        // the parameter entries:
+        // ------------------
+        [System.Serializable]
+        public class ParameterEntry
+        {
+            public string key;
+            public ParameterArgs value;
+            public ParameterEntry(string key, ParameterArgs value)
+            {
+                this.key = key;
+                this.value = value;
+            }
+        }
+        
+        [System.Serializable]
+        public class ParameterArgs
+        {
+            /// <summary>
+            /// optSeqOrder: an integer that represents the order of this parameter in a sequence of parameters.
+            /// isDiscrete: a bool that specifies whether the parameter takes discrete (quantized) values.
+            /// lowerBound: a float that represents the lower bound of the acceptable range of values for this parameter.
+            /// upperBound: a float that represents the upper bound of the acceptable range of values for this parameter.
+            /// step: a float that represents the increment between two consecutive values for a discrete parameter
+            /// Value: a float that represents the current value of this parameter.
+            /// reference: a float reference that can be used to keep track of the previous value of this parameter, if needed.
+            /// </summary>
+            [HideInInspector] public int optSeqOrder;
+            public float lowerBound = 0.0f;
+            public float upperBound = 0.0f;
+            public float Value = 0.0f;
+
+            /// <summary>
+            /// ParameterArgs(): a constructor that creates an empty instance of the ParameterArgs class.
+            /// </summary>
+            public ParameterArgs() { }
+
+            /// <summary>
+            /// ParameterArgs(lowerBound, upperBound): a constructor that creates an instance of the ParameterArgs class and sets
+            /// the lower and upper bounds of the acceptable range of values for this parameter.
+            /// </summary>
+            /// <param name="lowerBound"></param>
+            /// <param name="upperBound"></param>
+            public ParameterArgs(float lowerBound, float upperBound)
+            {
+                this.lowerBound = lowerBound;
+                this.upperBound = upperBound;
+            }
+        }
+}
