@@ -53,7 +53,7 @@ public class DriveYourselfAgent : Agent
     [Header("EndEpisodeConditions")]
     [SerializeField, Min(1)] private int endEpisodeAfterCompletedLaps = 1;
     [SerializeField] private int endEpisodeCarYPosition = -2;
-    [SerializeField] private int endEpisodeCarStuckSeconds = 15;
+    [SerializeField] public int endEpisodeCarStuckSeconds = 15;
 
     private GetVehicleData vehicleData;
     private Rigidbody carRb;
@@ -292,10 +292,15 @@ public class DriveYourselfAgent : Agent
         currentSteeringAngle = Mathf.MoveTowards(currentSteeringAngle, targetSteer, (1 / steeringSpeed) * Time.fixedDeltaTime);
 
         // Move
-        float currentThrottle = carController.throttleInput = acc;
-        float currentBrake = carController.brakeInput = brk;
-        float currentSteer = carController.steerInput = currentSteeringAngle;
-
+        float currentThrottle = 0.0f;
+        float currentBrake = 0.0f;
+        float currentSteer = 0.0f;
+        if (!carRb.isKinematic)
+        {
+            currentThrottle = carController.throttleInput = acc;
+            currentBrake = carController.brakeInput = brk;
+            currentSteer = carController.steerInput = currentSteeringAngle;
+        }
 
         // Input Text
         agentAccText.text = "Acc: " + acc.ToString("F4");
@@ -323,42 +328,21 @@ public class DriveYourselfAgent : Agent
 
                 float currentSpeed = vehicleData.GetSpeed();
                 float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
-                float weightRatio = DtCRewardPercent / 100.0f; // 0=Speed, 1=Safety
+                float weightRatio = DtCRewardPercent / 100.0f;
 
-
-                // --- 1. DEFINE THE CORRIDOR (The Hard Constraint) ---
-                // DtC 0 -> 4.0m width
-                // DtC 1 -> 0.1m width
-                float limitLoose = maxAllowedRewardDtc; // 4.0
-                float limitStrict = 0.1f;               // 0.1
+                float limitLoose = maxAllowedRewardDtc;
+                float limitStrict = 0.1f;
                 float currentLimit = Mathf.Lerp(limitLoose, limitStrict, weightRatio);
 
-                // CHECK: Are we alive?
-                // If we stepped outside the corridor, the reward for this step is ZERO.
                 if (currentDtC > currentLimit)
                 {
-                    // "Death" Penalty to discourage touching the lava
-                    // We give a small negative reward instead of just 0 to say "This is bad"
                     AddReward(-0.01f);
-
-                    // Log Stats (Optional)
                     episodeDtCDeviation += currentDtC;
-                    return; // Skip the rest of the reward calculation
+                    return;
                 }
 
-
-                // --- 2. CALCULATE BASE COMPONENTS ---
-
-                // A. Safety Score (0.0 to 1.0)
-                // Even inside the corridor, being closer to center is better.
-                // We use a linear ratio: Center=1.0, Edge=0.0
                 float safetyScore = Mathf.Clamp01(1.0f - (currentDtC / currentLimit));
-
-
-                // B. Speed Score (0.0 to 1.0)
-                // How close are we to target speed?
                 float speedError = Mathf.Abs(currentSpeed - targetSpeed);
-                // Tolerance: +/- 10% of target speed is "Perfect" (1.0)
                 float tolerance = Mathf.Max(targetSpeed * 0.1f, 5.0f);
 
                 float speedScore = 0.0f;
@@ -368,66 +352,37 @@ public class DriveYourselfAgent : Agent
                 }
                 else
                 {
-                    // Falloff outside tolerance
-                    // Example: Error 20km/h -> Score drops significantly
                     float extraError = speedError - tolerance;
                     speedScore = Mathf.Exp(-(extraError * extraError) / (2 * 10.0f * 10.0f));
                 }
 
-
-                // --- 3. BLEND BASED ON PRIORITY ---
-                // Now we decide what matters.
-                // If Weight = 1.0: Reward is 100% Safety Score. (Speed doesn't matter)
-                // If Weight = 0.0: Reward is 100% Speed Score. (Centering doesn't matter, as long as inside 4m)
-
                 float finalMultiplier = Mathf.Lerp(speedScore, safetyScore, weightRatio);
 
-                // --- 4. ACCELERATION LIMIT (The "G-Force" Check) ---
-                // Formula: 100km/h in m/s is 27.78.
-                // Max Accel (m/s^2) = 27.78 / Seconds.
-                float maxAccel = (100.0f / 3.6f) / Mathf.Max(accelTime0to100, 1.0f);
-                float currentAccel = Mathf.Abs(vehicleData.GetAccelleration()); // Get Magnitude
+                Vector3 accelVec = vehicleData.GetAccellerationVector();
+                float currentAccel = Mathf.Abs(accelVec.z);
+                float engineLimit = (100.0f / 3.6f) / Mathf.Max(accelTime0to100, 1.0f) * 5f;
+
+                if (currentAccel > engineLimit)
+                {
+                    float violation = currentAccel - engineLimit;
+                    float comfortFactor = Mathf.Clamp01(1.0f - (violation * 0.1f));
+                    finalMultiplier *= comfortFactor;
+                }
                 if (currentAccel > episodeMaxAcceleration)
                 {
                     episodeMaxAcceleration = currentAccel;
                 }
-                // If we exceed the G-Force Limit, the ENTIRE reward is voided.
-                if (currentAccel > maxAccel)
-                {
-                    finalMultiplier = 0.0f;
-                }
 
-
-                // --- 5. SMOOTHNESS PENALTY (The "Twitch" Check) ---
-                // Calculate how much the "feet" moved this frame
                 float deltaInput = Mathf.Abs(currentThrottle - lastThrottleInput) + Mathf.Abs(currentBrake - lastBrakeInput);
-
-                // NEW: Calculate how much the "hands" moved this frame
-                // targetSteer is the raw action from the brain (actions.ContinuousActions[1])
-                // lastSteeringAction is the raw action from the previous frame
                 float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction);
-
-                // Combine all jerky movements
                 float totalTwitch = deltaInput + deltaSteer;
 
-                // Threshold Logic:
-                // If threshold is 1.0 -> (1 - 1) = 0 multiplier -> No Penalty.
-                // If threshold is 0.0 -> (1 - 0) = 1 multiplier -> Full Penalty.
                 float smoothnessStrictness = 1.0f - Mathf.Clamp01(inputSmoothnessThreshold);
-
-                // Scale the penalty (0.1 is a reasonable weight per frame)
-                // We penalize steering twitch just as much as pedal twitch.
                 float smoothnessPenalty = totalTwitch * smoothnessStrictness * 0.1f;
 
-
-                // --- 6. APPLY TO PROGRESS ---
-                // We multiply the progress (distance traveled) by our Quality Multiplier.
-                // If you drive 1 meter but have bad Speed/Safety (depending on weight),
-                // it counts as moving 0 meters (wasted effort).
                 float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
                 float finalReward = deltaProgress * normalization * finalMultiplier;
 
-                // Final Sum (Subtract Smoothness Penalty)
                 finalReward -= smoothnessPenalty;
                 AddReward(finalReward);
 
@@ -445,7 +400,14 @@ public class DriveYourselfAgent : Agent
                 if (lastLap > endEpisodeAfterCompletedLaps && currentProgress > 33.33f)
                 {
                     InjectStats();
-                    EndEpisode();
+                    if (this.GetComponent<AgentSelector>().boActive)
+                    {
+                        this.GetComponent<AgentSelector>().IterationEnd();
+                    }
+                    else
+                    {
+                        EndEpisode();
+                    }
                 }
             }
         }

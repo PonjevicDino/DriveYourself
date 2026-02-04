@@ -161,8 +161,9 @@ namespace BOforUnity
                 Debug.Log("--------------------------------------Current Iteration: " + currentIteration);
 
                 simulationRunning = true; // waiting for the simulation to finish
-                
-                SceneManager.LoadScene(SceneManager.GetActiveScene().name); // reload scene
+
+                //GameObject.FindFirstObjectByType<DriveYourselfAgent>().GetComponent<DriveYourselfAgent>().OnEpisodeBegin();
+                GameObject.FindFirstObjectByType<AgentSelector>().GetComponent<AgentSelector>().boStartCommandGiven = true;
             }
             else if (currentIteration > totalIterations || isPerfect)
             {
@@ -213,6 +214,9 @@ namespace BOforUnity
             outputText.text = "The system has finished loading.\nYou can now proceed.";
             
             currentIteration++; // increase iteration counter
+
+            // Added manually
+            ButtonNextIteration();
         }
         
         public void InitializationDone()
@@ -310,7 +314,7 @@ namespace BOforUnity
         //-----------------------------------------------
     }
     
-            // ------------------
+        // ------------------
         // the objective entries:
         // ------------------
         [System.Serializable]

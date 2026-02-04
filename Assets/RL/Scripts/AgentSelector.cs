@@ -6,6 +6,10 @@ using Unity.InferenceEngine;
 using BOforUnity;
 using NUnit.Framework;
 using System.Collections.Generic;
+using System.Globalization;
+
+using static UnityEditor.Experimental.AssetDatabaseExperimental.AssetDatabaseCounters;
+
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -34,7 +38,9 @@ public class AgentSelector : MonoBehaviour
 
     private BoForUnityManager boUnity;
     private Dictionary<string, float> boValues;
-    public bool boStartCommandGiven = false;
+    [HideInInspector] public bool boStartCommandGiven = false;
+    private int origEndEpisodeCarStuckSeconds = 0;
+    private bool studyHasStarted = false;
 
     private void OnEnable()
     {
@@ -57,26 +63,42 @@ public class AgentSelector : MonoBehaviour
 
     private void Start()
     {
-        boUnity = GameObject.Find("BoForUnityManager").GetComponent<BoForUnityManager>();
+        if (GameObject.Find("BOforUnityManager") != null)
+        {
+            boUnity = GameObject.Find("BOforUnityManager").GetComponent<BoForUnityManager>();
+        }
+
         if (boUnity == null)
         {
             boActive = false;
         }
         else if (boValues == null)
         {
-            for (int parameterIdx = 0; parameterIdx < boUnity.parameters.Count; parameterIdx++)
-            {
-                var parameter = boUnity.parameters[parameterIdx];
-                boValues.Add(parameter.key, parameter.value.Value);
-            }
+            boValues = new Dictionary<string, float>();
+            ReadValuesFromBO();
+            SetValuesFromBO();
+        }
+
+        if (boActive)
+        {
+            origEndEpisodeCarStuckSeconds = agent.endEpisodeCarStuckSeconds;
+            agent.endEpisodeCarStuckSeconds = int.MaxValue;
+            agent.transform.parent.GetComponent<Rigidbody>().isKinematic = true;
         }
     }
 
-    private void FixedUpdate()
+    private void Update()
     {
         if (boActive && boStartCommandGiven)
         {
+            ReadValuesFromBO();
             SetValuesFromBO();
+            boStartCommandGiven = false;
+        }
+
+        if (boActive)
+        {
+            CheckForFeedback();
         }
     }
 
@@ -181,7 +203,7 @@ public class AgentSelector : MonoBehaviour
         int targetSpeed = int.Parse(name.Split("-")[1].Substring(1));
         int speedRewardPercent = int.Parse(name.Split("-")[2].Substring(1));
         int accTime = int.Parse(name.Split("-")[3].Substring(1));
-        int smoothingValue = int.Parse(name.Split("-")[4].Substring(1));
+        int smoothingValue = int.Parse(name.Split("-")[4].Substring(2));
 
         float calculatedSmoothingThreshold = Mathf.Clamp01(1.0f - (smoothingValue / 10.0f));
 
@@ -191,6 +213,16 @@ public class AgentSelector : MonoBehaviour
         agent.inputSmoothnessThreshold = calculatedSmoothingThreshold;
     }
 
+    private void ReadValuesFromBO()
+    {
+        for (int parameterIdx = 0; parameterIdx < boUnity.parameters.Count; parameterIdx++)
+        {
+            var parameter = boUnity.parameters[parameterIdx];
+            //Debug.Log("Added Parameter to BO-List: " + parameter.key + " = " + parameter.value.Value);
+            boValues[parameter.key] = parameter.value.Value;
+        }
+    }
+
     private void SetValuesFromBO()
     {
         targetSpeed = Mathf.RoundToInt(boValues["VehicleSpeed"]);
@@ -198,6 +230,48 @@ public class AgentSelector : MonoBehaviour
         targetAccelTime = Mathf.RoundToInt(boValues["VehicleMaxAcceleration"]);
         targetSmoothness = Mathf.RoundToInt(boValues["VehicleSmoothness"]);
 
+        agent.endEpisodeCarStuckSeconds = origEndEpisodeCarStuckSeconds;
+        agent.transform.parent.GetComponent<Rigidbody>().isKinematic = false;
+
         FindAndAssignModel();
+    }
+
+    public void IterationEnd()
+    {
+        agent.endEpisodeCarStuckSeconds = int.MaxValue;
+        agent.transform.parent.GetComponent<Rigidbody>().isKinematic = true;
+    }
+
+    private void CheckForFeedback()
+    {
+        int trust = 0;
+        bool buttonPressed = false;
+
+        if (Input.GetKeyDown(KeyCode.KeypadPlus))
+        {
+            trust = 5;
+            Debug.Log("User trusts the agent!");
+            buttonPressed = true;
+        }
+        if (Input.GetKeyDown(KeyCode.KeypadMinus))
+        {
+            trust = 1;
+            Debug.Log("User does not trust the agent!");
+            buttonPressed = true;
+        }
+
+        if (buttonPressed)
+        {
+            GameObject.FindFirstObjectByType<BoForUnityManager>().optimizer.AddObjectiveValue("Trust", trust);
+            GameObject.FindFirstObjectByType<BoForUnityManager>().optimizer.AddObjectiveValue("Comfort", 3);
+
+            GameObject.FindFirstObjectByType<BoForUnityManager>().OptimizationStart();
+        }
+
+        if (Input.GetKey(KeyCode.Space) && !studyHasStarted)
+        {
+            studyHasStarted = true;
+            GameObject.FindFirstObjectByType<BoForUnityManager>().ButtonNextIteration();
+        }
     }
 }

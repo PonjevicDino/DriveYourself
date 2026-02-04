@@ -9,16 +9,44 @@ using UnityEngine.InputSystem.XR;
 public class GetVehicleData : MonoBehaviour
 {
     private RCC_CarControllerV4 carController;
+    private Rigidbody carRb;
     private GameObject roadSegment;
     private RoadLayout roadLayout;
 
     private float segmentProgress;
     private int lap = 0;
 
+    // Calculation variables
+    private Vector3 lastVelocity;
+    private Vector3 currentAccelerationVector;
+    private float currentAccelerationMagnitude;
+    private float currentJerk;
+    private float lastAccelerationMag;
+
     void Start()
     {
         carController = this.transform.parent.GetComponent<RCC_CarControllerV4>();
+        carRb = carController.GetComponent<Rigidbody>();
         roadLayout = this.GetComponent<RoadLayout>();
+
+        if (carRb)
+        {
+            lastVelocity = carRb.linearVelocity;
+        }
+    }
+
+    void FixedUpdate()
+    {
+        if (!carController || !carRb) return;
+
+        Vector3 currentVelocity = carRb.linearVelocity;
+        Vector3 accelerationWorld = (currentVelocity - lastVelocity) / Time.fixedDeltaTime;
+
+        currentAccelerationVector = carController.transform.InverseTransformDirection(accelerationWorld);
+        currentAccelerationMagnitude = currentAccelerationVector.magnitude;
+        currentJerk = (currentAccelerationMagnitude - lastAccelerationMag) / Time.fixedDeltaTime;
+        lastVelocity = currentVelocity;
+        lastAccelerationMag = currentAccelerationMagnitude;
     }
 
     public float GetSpeed()
@@ -30,20 +58,19 @@ public class GetVehicleData : MonoBehaviour
         return carController.speed;
     }
 
-    private float lastSpeed = 0.0f;
     public float GetAccelleration()
     {
-        if (!carController)
-        {
-            return 0.0f;
-        }
-        return carController.speed - lastSpeed;
+        return currentAccelerationMagnitude;
     }
 
-    private float lastAcceleration = 0.0f;
+    public Vector3 GetAccellerationVector()
+    {
+        return currentAccelerationVector;
+    }
+
     public float GetJerk()
     {
-        return GetAccelleration() - lastAcceleration;
+        return currentJerk;
     }
 
     private float lastDtc = 0.0f;
@@ -141,8 +168,12 @@ public class GetVehicleData : MonoBehaviour
         }
         roadLayout.ResetProgress();
         roadSegment = roadLayout.roadSegments[0].gameObject;
-        lastSpeed = GetSpeed();
-        lastAcceleration = GetAccelleration();
+
+        if (carRb) lastVelocity = carRb.linearVelocity;
+        currentAccelerationVector = Vector3.zero;
+        currentAccelerationMagnitude = 0f;
+        lastAccelerationMag = 0f;
+
         lap = 1;
     }
 
