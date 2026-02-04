@@ -16,9 +16,7 @@
 
 using MotionSystems;
 using System;
-using System.Collections;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 public class CarMotionController : MonoBehaviour
 {
@@ -32,8 +30,6 @@ public class CarMotionController : MonoBehaviour
     private ForceSeatMI_Unity m_Api;
     private ForceSeatMI_Vehicle m_vehicle;
     private ForceSeatMI_Unity.ExtraParameters m_extraParameters;
-
-    private bool forceActive = false;
 
     private void Start()
     {
@@ -64,13 +60,6 @@ public class CarMotionController : MonoBehaviour
             m_Api.End();
         }
         // ForceSeatMI - END
-    }
-
-    private IEnumerator DisableForce()
-    {
-        yield return new WaitForSeconds(5.0f);
-        m_Rigidbody.mass /= 10.0f;
-        forceActive = false;
     }
 
     private void FixedUpdate()

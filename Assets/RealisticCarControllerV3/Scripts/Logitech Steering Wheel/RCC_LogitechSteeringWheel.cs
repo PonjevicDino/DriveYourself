@@ -439,7 +439,7 @@ public class RCC_LogitechSteeringWheel : MonoBehaviour
             LogitechGSDK.LogiPlaySurfaceEffect(0, LogitechGSDK.LOGI_PERIODICTYPE_SQUARE, absFFB, 100);
             LogitechGSDK.LogiPlayConstantForce(0, (int) (100 * Random.Range(-1.0f, 1.0f)));
             //DIManager.UpdateConstantForceSimple(ISDevice.description.serial, absFFB);
-            Debug.Log("ABS FFB: " + absFFB);
+            //Debug.Log("ABS FFB: " + absFFB);
         }
         else
         {

@@ -1187,6 +1187,8 @@ MonoBehaviour:
   targetSpeed: 50
   maxAllowedRewardDtc: 4
   DtCRewardPercent: 66
+  accelTime0to100: 10
+  inputSmoothnessThreshold: 0.5
   minCurriculumTrainingSpeed: 40
   steeringSpeed: 0.75
   endEpisodeAfterCompletedLaps: 1
@@ -1272,6 +1274,8 @@ MonoBehaviour:
   runPrefix: RunA01
   targetSpeed: 75
   targetWeight: 66
+  targetAccelTime: 10
+  targetSmoothness: 5
   currentLoadedModel: 007-S081-W66.onnx
 --- !u!1001 &359858341
 PrefabInstance:

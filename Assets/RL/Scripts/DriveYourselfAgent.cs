@@ -22,8 +22,6 @@ public class DriveYourselfAgent : Agent
     private float lastThrottleInput = 0.0f;
     private float lastBrakeInput = 0.0f;
     private float lastSteeringAction = 0.0f;
-    private float accelTime0to100 = 10.0f;
-    private float inputSmoothnessThreshold = 0.5f;
 
     [SerializeField] private int lookAheadSegments;
 
@@ -35,7 +33,7 @@ public class DriveYourselfAgent : Agent
     [SerializeField] private TextMeshProUGUI agentDtCText;
 
     [Header("Rewards")]
-    [SerializeField, Min(0f)] public float targetSpeed;
+    [SerializeField, Range(20.0f, 150.0f)] public float targetSpeed;
     //[SerializeField, Min(0f)] private float maxAllowedSafeAcc;
     //[SerializeField, Min(0f)] private float maxAllowedRewardAcc;
     //[SerializeField, Range(0.0f,100.0f)] private float accRewardPercent;
@@ -43,7 +41,9 @@ public class DriveYourselfAgent : Agent
     //[SerializeField, Min(0f)] private float maxAllowedRewardJerk;
     //[SerializeField, Range(0.0f,100.0f)] private float jerkRewardPercent;
     [SerializeField, Min(0f)] private float maxAllowedRewardDtc;
-    [SerializeField, Range(0.0f,100.0f)] public float DtCRewardPercent;
+    [SerializeField, Range(0.0f, 100.0f)] public float DtCRewardPercent;
+    [SerializeField, Range(5.0f, 20.0f)] public float accelTime0to100 = 10.0f;
+    [SerializeField, Range(0.0f, 1.0f)] public float inputSmoothnessThreshold = 0.5f;
 
     [Header("Speeds")]
     [SerializeField] private float minCurriculumTrainingSpeed = 40.0f;
@@ -76,10 +76,6 @@ public class DriveYourselfAgent : Agent
         X,
         Z
     }
-
-    float limitStrict = 0.5f;
-    float exponentStrict = 2.0f;
-    float exponentLoose = 20.0f;
 
     void Start()
     {
@@ -142,21 +138,24 @@ public class DriveYourselfAgent : Agent
         //this.transform.parent.Find("All Audio Sources").gameObject.SetActive(false);
         this.transform.parent.Find("All Contact Particles").gameObject.SetActive(false);
 
-        startingPositionForEpisode = startingPosition;
-        switch (startingAxis)
+        if (!this.GetComponent<AgentSelector>().boActive || this.GetComponent<AgentSelector>().boStartCommandGiven)
         {
-            case StartingAxis.X:
-                startingPositionForEpisode += new Vector3(0.0f, 0.0f, UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset));
-                break;
-            case StartingAxis.Z:
-                startingPositionForEpisode += new Vector3(UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset), 0.0f, 0.0f);
-                break;
-        }
-        carController.transform.SetPositionAndRotation(startingPositionForEpisode, startingRotation);
-        carController.transform.Rotate(new Vector3(0.0f, UnityEngine.Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0.0f));
+            startingPositionForEpisode = startingPosition;
+            switch (startingAxis)
+            {
+                case StartingAxis.X:
+                    startingPositionForEpisode += new Vector3(0.0f, 0.0f, UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset));
+                    break;
+                case StartingAxis.Z:
+                    startingPositionForEpisode += new Vector3(UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset), 0.0f, 0.0f);
+                    break;
+            }
+            carController.transform.SetPositionAndRotation(startingPositionForEpisode, startingRotation);
+            carController.transform.Rotate(new Vector3(0.0f, UnityEngine.Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0.0f));
 
-        //carRb.angularVelocity = Vector3.zero;
-        carRb.linearVelocity = (carController.transform.forward * UnityEngine.Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) + (carController.transform.right * UnityEngine.Random.Range(-startingMaximumSidewaysSpeed /3.6f, startingMaximumSidewaysSpeed / 3.6f));
+            //carRb.angularVelocity = Vector3.zero;
+            carRb.linearVelocity = (carController.transform.forward * UnityEngine.Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) + (carController.transform.right * UnityEngine.Random.Range(-startingMaximumSidewaysSpeed / 3.6f, startingMaximumSidewaysSpeed / 3.6f));
+        }
         carController.externalController = true;
         carController.GetComponent<RCC_LogitechSteeringWheel>().overrideFFB = true;
         vehicleData.ResetVars();

@@ -3,6 +3,9 @@ using Unity.MLAgents.Policies;
 using System.IO;
 using System.Text.RegularExpressions;
 using Unity.InferenceEngine;
+using BOforUnity;
+using NUnit.Framework;
+using System.Collections.Generic;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -17,26 +20,64 @@ public class AgentSelector : MonoBehaviour
     public string runPrefix = "Run001";
 
     [Header("Agent Parameters")]
-    [Range(0, 200)] public int targetSpeed = 20;
-    [Range(0, 100)] public int targetWeight = 85;
+    [UnityEngine.Range(0, 150)] public int targetSpeed = 20;
+    [UnityEngine.Range(0, 100)] public int targetWeight = 85;
+    [UnityEngine.Range(5, 20)] public int targetAccelTime = 10;
+    [UnityEngine.Range(0, 10)] public int targetSmoothness = 5;
 
     [Header("Status")]
     [SerializeField] private string currentLoadedModel = "None";
+    [SerializeField] public bool boActive = false;
 
     private BehaviorParameters behaviorParameters;
     private DriveYourselfAgent agent;
 
+    private BoForUnityManager boUnity;
+    private Dictionary<string, float> boValues;
+    public bool boStartCommandGiven = false;
+
     private void OnEnable()
     {
         Initialize();
-        FindAndAssignModel();
+        if (!boActive)
+        {
+            FindAndAssignModel();
+        }
     }
 
     private void OnValidate()
     {
         if (!this.enabled) return;
         Initialize();
-        FindAndAssignModel();
+        if (!boActive)
+        {
+            FindAndAssignModel();
+        }
+    }
+
+    private void Start()
+    {
+        boUnity = GameObject.Find("BoForUnityManager").GetComponent<BoForUnityManager>();
+        if (boUnity == null)
+        {
+            boActive = false;
+        }
+        else if (boValues == null)
+        {
+            for (int parameterIdx = 0; parameterIdx < boUnity.parameters.Count; parameterIdx++)
+            {
+                var parameter = boUnity.parameters[parameterIdx];
+                boValues.Add(parameter.key, parameter.value.Value);
+            }
+        }
+    }
+
+    private void FixedUpdate()
+    {
+        if (boActive && boStartCommandGiven)
+        {
+            SetValuesFromBO();
+        }
     }
 
     private void Initialize()
@@ -75,7 +116,7 @@ public class AgentSelector : MonoBehaviour
         string[] files = Directory.GetFiles(systemPath, "*.onnx");
         if (files.Length == 0) return;
 
-        string pattern = @"(\d+)[-_]S(\d+)[-_]W(\d+)\.onnx$";
+        string pattern = @"Agent_(\d+)-S(\d+)-W(\d+)-A(\d+)-Sm(\d+)\.onnx$";
         Regex regex = new Regex(pattern);
 
         string bestFilePath = "";
@@ -91,11 +132,15 @@ public class AgentSelector : MonoBehaviour
             {
                 int fileSpeed = int.Parse(match.Groups[2].Value);
                 int fileWeight = int.Parse(match.Groups[3].Value);
+                int fileAcc = int.Parse(match.Groups[4].Value);
+                int fileSmooth = int.Parse(match.Groups[5].Value);
 
-                float dist = Vector2.Distance(
-                    new Vector2(targetSpeed, targetWeight),
-                    new Vector2(fileSpeed, fileWeight)
-                );
+                float dSpeed = (targetSpeed - fileSpeed) / 150.0f;
+                float dWeight = (targetWeight - fileWeight) / 100.0f;
+                float dAcc = (targetAccelTime - fileAcc) / 20.0f;
+                float dSmooth = (targetSmoothness - fileSmooth) / 10.0f;
+
+                float dist = (dSpeed * dSpeed) + (dWeight * dWeight) + (dAcc * dAcc) + (dSmooth * dSmooth);
 
                 if (dist < minDistance)
                 {
@@ -135,8 +180,24 @@ public class AgentSelector : MonoBehaviour
     {
         int targetSpeed = int.Parse(name.Split("-")[1].Substring(1));
         int speedRewardPercent = int.Parse(name.Split("-")[2].Substring(1));
+        int accTime = int.Parse(name.Split("-")[3].Substring(1));
+        int smoothingValue = int.Parse(name.Split("-")[4].Substring(1));
+
+        float calculatedSmoothingThreshold = Mathf.Clamp01(1.0f - (smoothingValue / 10.0f));
 
         agent.targetSpeed = targetSpeed;
         agent.DtCRewardPercent = speedRewardPercent;
+        agent.accelTime0to100 = accTime;
+        agent.inputSmoothnessThreshold = calculatedSmoothingThreshold;
+    }
+
+    private void SetValuesFromBO()
+    {
+        targetSpeed = Mathf.RoundToInt(boValues["VehicleSpeed"]);
+        targetWeight = Mathf.RoundToInt(boValues["VehicleDistanceToCenter"]);
+        targetAccelTime = Mathf.RoundToInt(boValues["VehicleMaxAcceleration"]);
+        targetSmoothness = Mathf.RoundToInt(boValues["VehicleSmoothness"]);
+
+        FindAndAssignModel();
     }
 }
