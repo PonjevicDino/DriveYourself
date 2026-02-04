@@ -1,44 +1,77 @@
 import json
 import random
 import argparse
+import itertools
 
 def generate_agents(prefix, count):
     agents = []
+    vals_speed = [20, 85, 150]
+    vals_dtc = [0.10, 0.53, 0.95]
+    vals_acc = [5.0, 12.5, 20.0]
+    vals_smooth = [2, 6, 10]
+
+    combinations = list(itertools.product(vals_speed, vals_dtc, vals_acc, vals_smooth))
+    num_structured = len(combinations)
 
     print(f"Generating {count} agents with prefix '{prefix}'...")
 
-    for i in range(1, count + 1):
-        speed = random.randint(20, 150)
-        dtc_weight = round(random.uniform(0.1, 0.95), 2)
-        acc_time = round(random.uniform(5.0, 20.0), 1)
+    print(f"Generating agents with prefix '{prefix}'...")
 
-        smoothness_score = random.randint(2, 10)
-        smooth_threshold = round(1.0 - (smoothness_score / 10.0), 2)
-        smooth_threshold = max(0.1, smooth_threshold)
+    if count < num_structured:
+        print(f" [WARNING] Requesting {count} agents, but structured generation requires {num_structured} slots.")
+        print(f" [WARNING] Skipping structured generation. All agents will be RANDOM.")
+        for i in range(1, count + 1):
+            create_random_agent(agents, prefix, i)
 
-        num_str = f"{i:03d}"
-        speed_str = f"S{speed:03d}"
+    else:
+        print(f" [System] Generating {num_structured} structured agents (Min/Mid/Max grid)...")
+        for i, combo in enumerate(combinations, 1):
+            s, w, a, sm = combo
+            create_agent_from_values(agents, prefix, i, s, w, a, sm)
 
-        weight_val = int(dtc_weight * 100)
-        weight_str = f"W{weight_val:02d}"
-
-        acc_val = int(acc_time)
-        acc_str = f"A{acc_val:02d}"
-
-        smooth_str = f"Sm{smoothness_score:02d}"
-
-        agent_id = f"{prefix}-Agent_{num_str}-{speed_str}-{weight_str}-{acc_str}-{smooth_str}"
-
-        agent_data = {
-            "id": agent_id,
-            "speed": speed,
-            "dtc_weight": dtc_weight,
-            "acc_time": float(acc_time),
-            "smooth_threshold": float(smooth_threshold)
-        }
-        agents.append(agent_data)
+        remaining = count - num_structured
+        if remaining > 0:
+            print(f" [System] Generating {remaining} additional random agents...")
+            for i in range(num_structured + 1, count + 1):
+                create_random_agent(agents, prefix, i)
 
     return agents
+
+
+def create_random_agent(agents_list, prefix, index):
+    speed = random.randint(20, 150)
+    dtc_weight = round(random.uniform(0.1, 0.95), 2)
+    acc_time = round(random.uniform(5.0, 20.0), 1)
+    smoothness_score = random.randint(2, 10)
+
+    create_agent_from_values(agents_list, prefix, index, speed, dtc_weight, acc_time, smoothness_score)
+
+
+def create_agent_from_values(agents_list, prefix, index, speed, dtc_weight, acc_time, smoothness_score):
+    smooth_threshold = round(1.0 - (smoothness_score / 10.0), 2)
+    smooth_threshold = max(0.1, smooth_threshold)
+
+    num_str = f"{index:03d}"
+    speed_str = f"S{speed:03d}"
+
+    weight_val = int(dtc_weight * 100)
+    weight_str = f"W{weight_val:02d}"
+
+    acc_val = int(acc_time)
+    acc_str = f"A{acc_val:02d}"
+
+    smooth_str = f"Sm{smoothness_score:02d}"
+
+    agent_id = f"{prefix}-Agent_{num_str}-{speed_str}-{weight_str}-{acc_str}-{smooth_str}"
+
+    agent_data = {
+        "id": agent_id,
+        "speed": speed,
+        "dtc_weight": dtc_weight,
+        "acc_time": float(acc_time),
+        "smooth_threshold": float(smooth_threshold)
+    }
+    agents_list.append(agent_data)
 
 
 if __name__ == "__main__":
