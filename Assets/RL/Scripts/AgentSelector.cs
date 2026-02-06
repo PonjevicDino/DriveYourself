@@ -4,12 +4,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using Unity.InferenceEngine;
 using BOforUnity;
-using NUnit.Framework;
 using System.Collections.Generic;
-using System.Globalization;
-
-using static UnityEditor.Experimental.AssetDatabaseExperimental.AssetDatabaseCounters;
-
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -205,12 +200,17 @@ public class AgentSelector : MonoBehaviour
         int accTime = int.Parse(name.Split("-")[3].Substring(1));
         int smoothingValue = int.Parse(name.Split("-")[4].Substring(2));
 
-        float calculatedSmoothingThreshold = Mathf.Clamp01(1.0f - (smoothingValue / 10.0f));
+        float smoothSeconds = (smoothingValue - 2.0f) / 8.0f * 6.0f;
+        float calculatedThreshold = 1.0f;
+        if (smoothSeconds > 0.1f)
+        {
+            calculatedThreshold = 1.0f / (smoothSeconds * 50.0f);
+        }
 
         agent.targetSpeed = targetSpeed;
         agent.DtCRewardPercent = speedRewardPercent;
         agent.accelTime0to100 = accTime;
-        agent.inputSmoothnessThreshold = calculatedSmoothingThreshold;
+        agent.inputSmoothnessThreshold = calculatedThreshold;
     }
 
     private void ReadValuesFromBO()

@@ -262,7 +262,7 @@ public class DriveYourselfAgent : Agent
             return;
         }
 
-        float updateDiff = Time.fixedDeltaTime;
+        //float updateDiff = Time.fixedDeltaTime;
         //float currentAccPerSecond = vehicleData.GetAccelleration() / updateDiff;
         //float currentAccOffset = Mathf.Abs(currentAccPerSecond) - maxAllowedSafeAcc;
 
@@ -282,10 +282,12 @@ public class DriveYourselfAgent : Agent
         //AddReward(-0.005f);
 
         // Engine Inertia
+        /*
         if (carController.engineRPM > 800.0f * 2.0f)
         {
             AddReward(0.001f);
         }
+        */
 
         // Steering check
         float targetSteer = actions.ContinuousActions[1];
@@ -314,6 +316,7 @@ public class DriveYourselfAgent : Agent
         //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
         float currentProgress = vehicleData.GetProgress();
         float deltaProgress = Mathf.Max(0.001f, currentProgress - lastLapProgress);
+
         if (startedFirstLap && (deltaProgress > 0.001f || (vehicleData.GetLap() > lastLap && currentProgress < 50.0f)))
         {
             if (currentProgress < 50.0f)
@@ -330,68 +333,60 @@ public class DriveYourselfAgent : Agent
                 float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
                 float weightRatio = DtCRewardPercent / 100.0f;
 
+
+                // Speed
+                float speedError = Mathf.Abs(currentSpeed - targetSpeed);
+                float speedMultiplier = CalculateCliffReward(speedError, 10.0f, 10.0f);
+
+
+                // DtC
                 float limitLoose = maxAllowedRewardDtc;
                 float limitStrict = 0.1f;
                 float currentLimit = Mathf.Lerp(limitLoose, limitStrict, weightRatio);
 
-                if (currentDtC > currentLimit)
+                float dtcMultiplier = 0.0f;
+                if (currentDtC <= currentLimit)
                 {
-                    AddReward(-0.01f);
-                    episodeDtCDeviation += currentDtC;
-                    return;
+                    dtcMultiplier = 1.0f - (currentDtC / currentLimit);
                 }
 
-                float safetyScore = Mathf.Clamp01(1.0f - (currentDtC / currentLimit));
-                float speedError = Mathf.Abs(currentSpeed - targetSpeed);
-                float tolerance = Mathf.Max(targetSpeed * 0.1f, 5.0f);
 
-                float speedScore = 0.0f;
-                if (speedError <= tolerance)
-                {
-                    speedScore = 1.0f;
-                }
-                else
-                {
-                    float extraError = speedError - tolerance;
-                    speedScore = Mathf.Exp(-(extraError * extraError) / (2 * 10.0f * 10.0f));
-                }
-
-                float finalMultiplier = Mathf.Lerp(speedScore, safetyScore, weightRatio);
-
+                // Acceleration
                 Vector3 accelVec = vehicleData.GetAccellerationVector();
-                float currentAccel = Mathf.Abs(accelVec.z);
-                float engineLimit = (100.0f / 3.6f) / Mathf.Max(accelTime0to100, 1.0f) * 5f;
+                float longitudinalAccel = Mathf.Abs(accelVec.z);
+                float engineLimit = (100.0f / 3.6f) / Mathf.Max(accelTime0to100, 1.0f) * 2.5f;
+                float accMultiplier = CalculateCliffReward(longitudinalAccel, engineLimit, 2.0f);
 
-                if (currentAccel > engineLimit)
+                if (longitudinalAccel > episodeMaxAcceleration)
                 {
-                    float violation = currentAccel - engineLimit;
-                    float comfortFactor = Mathf.Clamp01(1.0f - (violation * 0.1f));
-                    finalMultiplier *= comfortFactor;
-                }
-                if (currentAccel > episodeMaxAcceleration)
-                {
-                    episodeMaxAcceleration = currentAccel;
+                    episodeMaxAcceleration = longitudinalAccel;
                 }
 
+
+                // Smoothness
                 float deltaInput = Mathf.Abs(currentThrottle - lastThrottleInput) + Mathf.Abs(currentBrake - lastBrakeInput);
-                float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction);
+                float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction) * 0.5f;
                 float totalTwitch = deltaInput + deltaSteer;
 
-                float smoothnessStrictness = 1.0f - Mathf.Clamp01(inputSmoothnessThreshold);
-                float smoothnessPenalty = totalTwitch * smoothnessStrictness * 0.1f;
+                float smoothMultiplier = CalculateCliffReward(totalTwitch, inputSmoothnessThreshold, 0.1f);
+
+
+                // Final
+                float combinedMultiplier = speedMultiplier * dtcMultiplier * accMultiplier * smoothMultiplier;
 
                 float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
-                float finalReward = deltaProgress * normalization * finalMultiplier;
+                float finalReward = deltaProgress * normalization * combinedMultiplier;
 
-                finalReward -= smoothnessPenalty;
                 AddReward(finalReward);
 
+
+                // Logging
                 episodeProgressReward += finalReward;
-                episodeSpeedReward += speedScore;
-                episodeDtCReward += safetyScore;
-                episodeSpeedDeviation += Mathf.Abs(targetSpeed - currentSpeed);
+                episodeSpeedReward += speedMultiplier;
+                episodeDtCReward += dtcMultiplier;
+                episodeSpeedDeviation += speedError;
                 episodeDtCDeviation += currentDtC;
-                episodeSmoothnessPenalty += smoothnessPenalty;
+                episodeSmoothnessPenalty += (1.0f - smoothMultiplier);
 
                 lastThrottleInput = currentThrottle;
                 lastBrakeInput = currentBrake;
@@ -476,5 +471,18 @@ public class DriveYourselfAgent : Agent
                 wheelPs.gameObject.SetActive(false);
             }
         }
+    }
+
+    private float CalculateCliffReward(float val, float limit, float cliffWidth)
+    {
+        if (val <= limit)
+        {
+            return 1.0f; 
+        }
+
+        float violation = val - limit;
+        float penalty = violation / cliffWidth;
+
+        return Mathf.Clamp01(1.0f - penalty);
     }
 }

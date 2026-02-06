@@ -48,8 +48,12 @@ def create_random_agent(agents_list, prefix, index):
 
 
 def create_agent_from_values(agents_list, prefix, index, speed, dtc_weight, acc_time, smoothness_score):
-    smooth_threshold = round(1.0 - (smoothness_score / 10.0), 2)
-    smooth_threshold = max(0.1, smooth_threshold)
+    smooth_seconds = (smoothness_score - 2) / 8.0 * 6.0
+    if smooth_seconds <= 0.1:
+        smooth_threshold = 1.0
+    else:
+        smooth_threshold = 1.0 / (smooth_seconds * 50.0)
+    smooth_threshold = round(smooth_threshold, 5)
 
     num_str = f"{index:03d}"
     speed_str = f"S{speed:03d}"
