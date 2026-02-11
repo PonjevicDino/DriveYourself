@@ -51,7 +51,7 @@ def create_agent_from_values(agents_list, prefix, index, speed, dtc_weight, acc_
     physics_fps = 50.0
     full_range = 2.0
     
-    if smooth_seconds <= 0.1:
+    if smoothness_score <= 0.1:
         smooth_threshold = full_range
     else:
         total_frames = smoothness_score * physics_fps
