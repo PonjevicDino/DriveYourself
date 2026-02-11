@@ -19,7 +19,7 @@ public class AgentSelector : MonoBehaviour
     public string runPrefix = "Run001";
 
     [Header("Agent Parameters")]
-    [UnityEngine.Range(0, 150)] public int targetSpeed = 20;
+    [UnityEngine.Range(20, 100)] public int targetSpeed = 20;
     [UnityEngine.Range(0, 100)] public int targetWeight = 85;
     [UnityEngine.Range(5, 20)] public int targetAccelTime = 10;
     [UnityEngine.Range(0, 10)] public int targetSmoothness = 5;
@@ -152,7 +152,7 @@ public class AgentSelector : MonoBehaviour
                 int fileAcc = int.Parse(match.Groups[4].Value);
                 int fileSmooth = int.Parse(match.Groups[5].Value);
 
-                float dSpeed = (targetSpeed - fileSpeed) / 150.0f;
+                float dSpeed = (targetSpeed - fileSpeed) / 100.0f;
                 float dWeight = (targetWeight - fileWeight) / 100.0f;
                 float dAcc = (targetAccelTime - fileAcc) / 20.0f;
                 float dSmooth = (targetSmoothness - fileSmooth) / 10.0f;

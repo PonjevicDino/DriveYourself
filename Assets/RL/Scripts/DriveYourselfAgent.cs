@@ -24,6 +24,7 @@ public class DriveYourselfAgent : Agent
     private float lastSteeringAction = 0.0f;
 
     private float smoothnessProgression = 1.0f;
+    private float dtcProgression = 1.0f;
 
     [SerializeField] private int lookAheadSegments;
 
@@ -35,7 +36,7 @@ public class DriveYourselfAgent : Agent
     [SerializeField] private TextMeshProUGUI agentDtCText;
 
     [Header("Rewards")]
-    [SerializeField, Range(20.0f, 150.0f)] public float targetSpeed;
+    [SerializeField, Range(20.0f, 100.0f)] public float targetSpeed;
     //[SerializeField, Min(0f)] private float maxAllowedSafeAcc;
     //[SerializeField, Min(0f)] private float maxAllowedRewardAcc;
     //[SerializeField, Range(0.0f,100.0f)] private float accRewardPercent;
@@ -45,7 +46,7 @@ public class DriveYourselfAgent : Agent
     [SerializeField, Min(0f)] private float maxAllowedRewardDtc;
     [SerializeField, Range(0.0f, 100.0f)] public float DtCRewardPercent;
     [SerializeField, Range(5.0f, 20.0f)] public float accelTime0to100 = 10.0f;
-    [SerializeField, Range(0.0f, 1.0f)] public float inputSmoothnessThreshold = 0.5f;
+    [SerializeField, Range(0.0f, 2.0f)] public float inputSmoothnessThreshold = 0.5f;
 
     [Header("Speeds")]
     [SerializeField] private float minCurriculumTrainingSpeed = 40.0f;
@@ -113,8 +114,9 @@ public class DriveYourselfAgent : Agent
             inputSmoothnessThreshold = Academy.Instance.EnvironmentParameters.GetWithDefault("smooth_threshold", 0.5f);
             float minRatio = minCurriculumTrainingSpeed / Mathf.Max(rawTargetSpeed, 1.0f);
             effectiveRatio = Mathf.Clamp(Mathf.Max(difficultyRatio, minRatio), 0.0f, 1.0f);
-            targetSpeed = Mathf.Max(rawTargetSpeed * effectiveRatio, 10.0f);
+            targetSpeed = Mathf.Max(rawTargetSpeed * effectiveRatio, 20.0f);
             smoothnessProgression = Academy.Instance.EnvironmentParameters.GetWithDefault("smoothness_progression", 1.0f);
+            dtcProgression = Academy.Instance.EnvironmentParameters.GetWithDefault("dtc_progression", 1.0f);
         }
 
         lastThrottleInput = 0.0f;
@@ -342,12 +344,13 @@ public class DriveYourselfAgent : Agent
 
 
                 // DtC
-                float currentLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, weightRatio);
+                float dnaTargetLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, weightRatio);
+                float currentEffectiveLimit = Mathf.Lerp(maxAllowedRewardDtc, dnaTargetLimit, dtcProgression);
 
                 float dtcMultiplier = 0.0f;
-                if (currentDtC <= currentLimit)
+                if (currentDtC <= currentEffectiveLimit)
                 {
-                    dtcMultiplier = 1.0f - (currentDtC / currentLimit);
+                    dtcMultiplier = 1.0f - (currentDtC / currentEffectiveLimit);
                 }
 
 
@@ -365,17 +368,16 @@ public class DriveYourselfAgent : Agent
 
                 // Smoothness
                 float deltaInput = Mathf.Abs(currentThrottle - lastThrottleInput) + Mathf.Abs(currentBrake - lastBrakeInput);
-                float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction) * 0.5f;
+                float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction);
                 float totalTwitch = deltaInput + deltaSteer;
-
-                float effectiveThreshold = Mathf.Lerp(1.0f, inputSmoothnessThreshold, smoothnessProgression);
+                float effectiveThreshold = Mathf.Lerp(2.0f, inputSmoothnessThreshold, smoothnessProgression);
                 float smoothMultiplier = CalculateCliffReward(totalTwitch, effectiveThreshold, 0.1f);
 
 
                 // Final
                 float combinedMultiplier = speedMultiplier * dtcMultiplier * accMultiplier * smoothMultiplier;
 
-                float normalization = 150.0f / Mathf.Max(targetSpeed, 10.0f);
+                float normalization = 100.0f / Mathf.Max(targetSpeed, 10.0f);
                 float finalReward = deltaProgress * normalization * combinedMultiplier;
 
                 AddReward(finalReward);
