@@ -162,7 +162,16 @@ public class DriveYourselfAgent : Agent
             carRb.linearVelocity = (carController.transform.forward * UnityEngine.Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) + (carController.transform.right * UnityEngine.Random.Range(-startingMaximumSidewaysSpeed / 3.6f, startingMaximumSidewaysSpeed / 3.6f));
         }
         carController.externalController = true;
-        carController.GetComponent<RCC_LogitechSteeringWheel>().overrideFFB = true;
+#if UNITY_EDITOR || UNITY_STANDALONE_WIN
+        if (!Application.isBatchMode)
+        {
+            var wheel = carController.GetComponent<RCC_LogitechSteeringWheel>();
+            if (wheel) 
+            { 
+                wheel.overrideFFB = true;
+            }
+        }
+#endif
         vehicleData.ResetVars();
         carController.canGoReverseNow = false;
         carController.currentGear = 1;

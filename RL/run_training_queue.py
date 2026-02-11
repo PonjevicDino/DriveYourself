@@ -65,18 +65,18 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index):
         with open(temp_config_path, 'w') as f:
             yaml.dump(local_config, f)
 
-        cmd = [
-            "mlagents-learn",
-            temp_config_path,
-            f"--run-id={run_id}",
-            f"--env={args.env}",
-            f"--base-port={assigned_port}",
-            "--num-envs=16",
-            "--no-graphics",
-            "--force",
-            "--width=512", "--height=512",
+        cmd_string = (
+            f"mlagents-learn \"{temp_config_path}\" "
+            f"--run-id=\"{run_id}\" "
+            f"--env=\"{args.env}\" "
+            f"--base-port={assigned_port} "
+            "--num-envs=16 "
+            "--no-graphics "
+            "--force "
+            "--width=512 --height=512 "
             "--timeout-wait=300"
-        ]
+        )
+        cmd = ["cmd", "/c", f"{cmd_string} || pause"]
 
         process = subprocess.Popen(
             cmd,
