@@ -23,6 +23,8 @@ public class DriveYourselfAgent : Agent
     private float lastBrakeInput = 0.0f;
     private float lastSteeringAction = 0.0f;
 
+    private float smoothnessProgression = 1.0f;
+
     [SerializeField] private int lookAheadSegments;
 
     [SerializeField] private TextMeshProUGUI agentAccText;
@@ -112,6 +114,7 @@ public class DriveYourselfAgent : Agent
             float minRatio = minCurriculumTrainingSpeed / Mathf.Max(rawTargetSpeed, 1.0f);
             effectiveRatio = Mathf.Clamp(Mathf.Max(difficultyRatio, minRatio), 0.0f, 1.0f);
             targetSpeed = Mathf.Max(rawTargetSpeed * effectiveRatio, 10.0f);
+            smoothnessProgression = Academy.Instance.EnvironmentParameters.GetWithDefault("smoothness_progression", 1.0f);
         }
 
         lastThrottleInput = 0.0f;
@@ -200,22 +203,22 @@ public class DriveYourselfAgent : Agent
             return;
         }
 
-        sensor.AddObservation(targetSpeed / 150f); // 150 as the maximum Speed
+        sensor.AddObservation(targetSpeed / 100f);
         sensor.AddObservation(DtCRewardPercent / 100f);
         sensor.AddObservation(accelTime0to100 / 20.0f);
         sensor.AddObservation(inputSmoothnessThreshold);
 
-        sensor.AddObservation(vehicleData.GetSpeed());
-        sensor.AddObservation(vehicleData.GetAccelleration() / 10f);
-        //sensor.AddObservation(vehicleData.GetJerk());
-        sensor.AddObservation(vehicleData.GetDtC() / maxAllowedRewardDtc);
+        sensor.AddObservation(vehicleData.GetSpeed() / 100f);
+        sensor.AddObservation(vehicleData.GetAccelleration());
+        sensor.AddObservation(Mathf.Abs(vehicleData.GetDtC()) / maxAllowedRewardDtc);
+        sensor.AddObservation(vehicleData.ReturnLastDtC() / Mathf.Abs(vehicleData.ReturnLastDtC()));
 
         sensor.AddObservation(carController.throttleInput);
         sensor.AddObservation(carController.brakeInput);
         sensor.AddObservation(currentSteeringAngle / carController.steerAngle);
 
         Vector3 localVelocity = carController.transform.InverseTransformDirection(carRb.linearVelocity);
-        sensor.AddObservation(localVelocity.x / 10.0f); // assuming 20 m/s max slide speed
+        sensor.AddObservation(localVelocity.x / 10.0f);
 
         GameObject currentSegment = vehicleData.GetRoadSegment();
         switch (currentSegment.name.Split("_")[1])
@@ -329,20 +332,17 @@ public class DriveYourselfAgent : Agent
             {
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
-                float currentSpeed = vehicleData.GetSpeed();
                 float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
                 float weightRatio = DtCRewardPercent / 100.0f;
 
 
                 // Speed
-                float speedError = Mathf.Abs(currentSpeed - targetSpeed);
+                float speedError = Mathf.Abs(vehicleData.GetSpeed() - targetSpeed);
                 float speedMultiplier = CalculateCliffReward(speedError, 10.0f, 10.0f);
 
 
                 // DtC
-                float limitLoose = maxAllowedRewardDtc;
-                float limitStrict = 0.1f;
-                float currentLimit = Mathf.Lerp(limitLoose, limitStrict, weightRatio);
+                float currentLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, weightRatio);
 
                 float dtcMultiplier = 0.0f;
                 if (currentDtC <= currentLimit)
@@ -368,7 +368,8 @@ public class DriveYourselfAgent : Agent
                 float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction) * 0.5f;
                 float totalTwitch = deltaInput + deltaSteer;
 
-                float smoothMultiplier = CalculateCliffReward(totalTwitch, inputSmoothnessThreshold, 0.1f);
+                float effectiveThreshold = Mathf.Lerp(1.0f, inputSmoothnessThreshold, smoothnessProgression);
+                float smoothMultiplier = CalculateCliffReward(totalTwitch, effectiveThreshold, 0.1f);
 
 
                 // Final

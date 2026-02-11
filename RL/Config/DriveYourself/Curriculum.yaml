@@ -1,4 +1,5 @@
 environment_parameters:
+
   difficulty_ratio:
     curriculum:
       # --- PHASE 1: CRAWLING (Learning to Steer) ---
@@ -88,3 +89,89 @@ environment_parameters:
       # --- PHASE 4: REALITY ---
       - name: Lesson9
         value: 1.0
+        
+  smoothness_progression:
+    curriculum:
+      - name: Lesson0
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 50
+          threshold: 0.10
+        value: 0.0     # 0% Strictness (Threshold 1.0)
+
+      - name: Lesson1
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 50
+          threshold: 0.15
+        value: 0.1     # 10% Strictness
+
+      - name: Lesson2
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 50
+          threshold: 0.20
+        value: 0.2
+
+      - name: Lesson3
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 75
+          threshold: 0.25
+        value: 0.3
+
+      - name: Lesson4
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 75
+          threshold: 0.30
+        value: 0.4
+
+      - name: Lesson5
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.40
+        value: 0.6     # 60% Strictness
+
+      - name: Lesson6
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.50
+        value: 0.7
+
+      - name: Lesson7
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.60
+        value: 0.85
+
+      - name: Lesson8
+        completion_criteria:
+          measure: progress
+          behavior: TestModel
+          signal_smoothing: true
+          min_lesson_length: 150
+          threshold: 0.66
+        value: 0.95    # Almost full strictness
+
+      - name: Lesson9
+        value: 1.0     # Full Strictness (Target Threshold)
