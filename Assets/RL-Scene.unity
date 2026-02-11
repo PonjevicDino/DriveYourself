@@ -1143,7 +1143,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_BrainParameters:
-    VectorObservationSize: 30
+    VectorObservationSize: 31
     NumStackedVectorObservations: 1
     m_ActionSpec:
       m_NumContinuousActions: 2
@@ -1277,6 +1277,8 @@ MonoBehaviour:
   targetAccelTime: 10
   targetSmoothness: 5
   currentLoadedModel: 007-S081-W66.onnx
+  boActive: 0
+  boStartCommandGiven: 0
 --- !u!1001 &359858341
 PrefabInstance:
   m_ObjectHideFlags: 0
