@@ -222,7 +222,7 @@ public class DriveYourselfAgent : Agent
         sensor.AddObservation(vehicleData.GetSpeed() / 100f);
         sensor.AddObservation(vehicleData.GetAccelleration());
         sensor.AddObservation(Mathf.Abs(vehicleData.GetDtC()) / maxAllowedRewardDtc);
-        sensor.AddObservation(vehicleData.ReturnLastDtC() / Mathf.Abs(vehicleData.ReturnLastDtC()));
+        sensor.AddObservation(Mathf.Abs(vehicleData.ReturnLastDtC()) < 0.01f ? 0f : Mathf.Sign(vehicleData.ReturnLastDtC()));
 
         sensor.AddObservation(carController.throttleInput);
         sensor.AddObservation(carController.brakeInput);
