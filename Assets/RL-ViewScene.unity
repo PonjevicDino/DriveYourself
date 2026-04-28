@@ -1189,7 +1189,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_BrainParameters:
-    VectorObservationSize: 30
+    VectorObservationSize: 31
     NumStackedVectorObservations: 1
     m_ActionSpec:
       m_NumContinuousActions: 2
@@ -1198,7 +1198,7 @@ MonoBehaviour:
     VectorActionDescriptions: []
     VectorActionSpaceType: 1
     hasUpgradedBrainParametersWithActionSpec: 1
-  m_Model: {fileID: 5022602860645237092, guid: a3a2854a7543c0342b4b1e779acc6777, type: 3}
+  m_Model: {fileID: 5022602860645237092, guid: 800e4aee29796f84780c69a2bca40f0a, type: 3}
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: TestModel
@@ -1230,10 +1230,10 @@ MonoBehaviour:
   agentSpdText: {fileID: 1073547967}
   agentRpmText: {fileID: 868582843}
   agentDtCText: {fileID: 880381071}
-  targetSpeed: 20
+  targetSpeed: 80
   maxAllowedRewardDtc: 4
-  DtCRewardPercent: 53
-  accelTime0to100: 20
+  DtCRewardPercent: 48
+  accelTime0to100: 19
   inputSmoothnessThreshold: 0.0033333334
   minCurriculumTrainingSpeed: 40
   steeringSpeed: 0.75
@@ -1317,12 +1317,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rootFolder: Assets/RL/Models
-  runPrefix: RunA04
-  targetSpeed: 20
+  runPrefix: RunA07
+  targetSpeed: 71
   targetWeight: 50
   targetAccelTime: 20
   targetSmoothness: 10
-  currentLoadedModel: Agent_018-S020-W53-A20-Sm10.onnx
+  currentLoadedModel: Agent_297-S080-W48-A19-Sm10.onnx
   boActive: 0
   boStartCommandGiven: 0
 --- !u!1 &355382647
