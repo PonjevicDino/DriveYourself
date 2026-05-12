@@ -4,7 +4,7 @@ behaviors:
     hyperparameters:
       batch_size: 4096
       buffer_size: 40960
-      learning_rate: 0.0003
+      learning_rate: 0.00015
       beta: 0.0025
       epsilon: 0.2
       epsilon_schedule: linear   
@@ -17,14 +17,16 @@ behaviors:
       hidden_units: 256
       num_layers: 3
       vis_encode_type: simple
-      use_recurrent: true
-      sequence_length: 128
-      memory_size: 256
+      use_recurrent: false
+      # sequence_length: 128
+      # memory_size: 256
     reward_signals:
       extrinsic:
         gamma: 0.995
         strength: 1.0
-    max_steps: 320000000  # ~ 5.000.000 times Envs (16) times Agents (4)
+    max_steps: 320000000  # ~ 5.000.000 times Envs (16/8) times Agents (4)
+    checkpoint_interval: 1000000 
+    keep_checkpoints: 25
     time_horizon: 128
-    summary_freq: 320000  # ~ 5.000 times Envs (16) times Agents (4)
+    summary_freq: 50000  # ~ 5.000 times Envs (16/8) times Agents (4) | Adapted
     threaded: true

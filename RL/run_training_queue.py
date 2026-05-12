@@ -13,7 +13,11 @@ PORT_GAP = 64
 
 def train_single_agent(agent_data, base_yaml_config, args, worker_index):
     try:
-        delay = 5
+        if worker_index < args.concurrency:
+            delay = worker_index * 5
+        else:
+            delay = 0
+
         if delay > 0:
             print(f" [System] Worker {worker_index} waiting {delay}s to avoid CPU spike...")
             time.sleep(delay)
@@ -34,23 +38,27 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index):
 
         temp_config_path = f"temp_config_{run_id}.yaml"
 
-        curriculum_path = "Config/DriveYourself/Curriculum.yaml"
 
-        curriculum_data = {}
-        if os.path.exists(curriculum_path):
-            with open(curriculum_path, 'r') as f:
-                full_curriculum_yaml = yaml.safe_load(f)
-                if full_curriculum_yaml is None:
-                    print(f" [Warning] {curriculum_path} is empty or invalid YAML!")
-                    full_curriculum_yaml = {}
-
-                curriculum_data = full_curriculum_yaml.get("environment_parameters", {})
-        else:
-            print(f" [Warning] Curriculum file not found at {curriculum_path}! Running without it.")
+        # Temporarily disabled
+        #curriculum_path = "Config/DriveYourself/Curriculum.yaml"
+        #
+        #curriculum_data = {}
+        #if os.path.exists(curriculum_path):
+        #    with open(curriculum_path, 'r') as f:
+        #        full_curriculum_yaml = yaml.safe_load(f)
+        #        if full_curriculum_yaml is None:
+        #            print(f" [Warning] {curriculum_path} is empty or invalid YAML!")
+        #            full_curriculum_yaml = {}
+        #
+        #        curriculum_data = full_curriculum_yaml.get("environment_parameters", {})
+        #else:
+        #    print(f" [Warning] Curriculum file not found at {curriculum_path}! Running without it.")
 
         local_config = base_yaml_config.copy()
 
-        merged_params = curriculum_data.copy()
+        # merged_params = curriculum_data.copy()
+        merged_params = {}
+        merged_params["difficulty_ratio"] = 1.0
         merged_params["target_speed"] = float(speed)
         merged_params["dtc_weight"] = float(dtc_weight)
         merged_params["acc_time"] = float(acc_time)
@@ -62,6 +70,13 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index):
             for behavior_name in local_config['behaviors']:
                 local_config['behaviors'][behavior_name]['max_steps'] = args.steps
 
+        #if "engine_settings" not in local_config:
+        #    local_config["engine_settings"] = {}
+        #
+        #local_config["engine_settings"]["time_scale"] = 1.0
+        #local_config["engine_settings"]["target_frame_rate"] = 60
+        #local_config["engine_settings"]["capture_frame_rate"] = 0
+
         with open(temp_config_path, 'w') as f:
             yaml.dump(local_config, f)
 
@@ -70,11 +85,11 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index):
             f"--run-id={run_id} "
             f"--env={args.env} "
             f"--base-port={assigned_port} "
-            "--num-envs=16 "
-            "--no-graphics "
+            "--num-envs=4 "
             "--force "
-            "--width=512 --height=512 "
-            "--timeout-wait=300"
+            "--width=768 --height=512 "
+            "--timeout-wait=300 "
+            "--no-graphics"
         )
         cmd = ["cmd", "/c", f"{cmd_string} || pause"]
 

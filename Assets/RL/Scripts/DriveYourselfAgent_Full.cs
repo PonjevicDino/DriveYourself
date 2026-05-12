@@ -7,12 +7,12 @@ using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
 using UnityEngine;
 
-public class DriveYourselfAgent : Agent
+public class DriveYourselfAgent_Full : Agent
 {
     private RCC_CarControllerV4 carController;
 
     private float episodeProgressReward;
-    private float episodeSpeedPenalty;
+    private float episodeSpeedReward;
     private float episodeSpeedDeviation;
     private float episodeMaxAcceleration;
     private float episodeSmoothnessPenalty;
@@ -25,10 +25,6 @@ public class DriveYourselfAgent : Agent
 
     private float smoothnessProgression = 1.0f;
     private float dtcProgression = 1.0f;
-    
-    private float targetSteer = 0.0f;
-    private float targetThrottle = 0.0f;
-    private float targetBrake = 0.0f;
 
     [SerializeField] private int lookAheadSegments;
 
@@ -54,11 +50,8 @@ public class DriveYourselfAgent : Agent
 
     [Header("Speeds")]
     [SerializeField] private float minCurriculumTrainingSpeed = 40.0f;
-    [SerializeField] private float steeringSpeed = 0.25f; // time from full lock to center
-    [SerializeField] private float pedalSpeed = 0.25f;
+    [SerializeField] private float steeringSpeed = 0.75f; // time from full lock to center
     private float currentSteeringAngle = 0.0f;
-    private float currentThrottle = 0.0f;
-    private float currentBrake = 0.0f;
 
     [Header("EndEpisodeConditions")]
     [SerializeField, Min(1)] private int endEpisodeAfterCompletedLaps = 1;
@@ -106,32 +99,6 @@ public class DriveYourselfAgent : Agent
     {
         fixedUpdateCounter++;
         ingameSecondsSinceStartup = fixedUpdateCounter * Time.fixedDeltaTime;
-        
-        currentThrottle = Mathf.MoveTowards(currentThrottle, targetThrottle, (1.0f / pedalSpeed) * Time.fixedDeltaTime);
-        currentBrake = Mathf.MoveTowards(currentBrake, targetBrake, (1.0f / pedalSpeed) * Time.fixedDeltaTime);
-        currentSteeringAngle = Mathf.MoveTowards(currentSteeringAngle, targetSteer, (1.0f / steeringSpeed) * Time.fixedDeltaTime);
-
-        // Apply it to the physical car
-        if (!carRb.isKinematic)
-        {
-            carController.throttleInput = currentThrottle;
-            carController.brakeInput = currentBrake;
-            carController.steerInput = currentSteeringAngle;
-        }
-    }
-    
-    private void Update()
-    {
-        // Should be in Update as FixedUpdate returns always 0.2 secs
-        if (Academy.Instance.IsCommunicatorOn)
-        {
-            Academy.Instance.StatsRecorder.Add("Performance/Delta_Time", Time.deltaTime, StatAggregationMethod.Average);
-            Academy.Instance.StatsRecorder.Add("Performance/Effective_Time_Scale", Time.timeScale, StatAggregationMethod.Average);
-            if (Time.deltaTime >= Time.maximumDeltaTime - 0.01f)
-            {
-                Academy.Instance.StatsRecorder.Add("Performance/Lag_Spikes", 1.0f, StatAggregationMethod.Sum);
-            }
-        }
     }
 
     public override void OnEpisodeBegin()
@@ -159,7 +126,7 @@ public class DriveYourselfAgent : Agent
         // Debug.Log($"[Agent Setup] Name: {transform.name} | Target Speed: {targetSpeed} | DtC %: {DtCRewardPercent}");
 
         episodeProgressReward = 0.0f;
-        episodeSpeedPenalty = 0.0f;
+        episodeSpeedReward = 0.0f;
         episodeSpeedDeviation = 0.0f;
         episodeDtCReward = 0.0f;
         episodeDtCDeviation = 0.0f;
@@ -191,7 +158,7 @@ public class DriveYourselfAgent : Agent
             carController.transform.SetPositionAndRotation(startingPositionForEpisode, startingRotation);
             carController.transform.Rotate(new Vector3(0.0f, UnityEngine.Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0.0f));
 
-            carRb.angularVelocity = Vector3.zero;
+            //carRb.angularVelocity = Vector3.zero;
             carRb.linearVelocity = (carController.transform.forward * UnityEngine.Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) + (carController.transform.right * UnityEngine.Random.Range(-startingMaximumSidewaysSpeed / 3.6f, startingMaximumSidewaysSpeed / 3.6f));
         }
         carController.externalController = true;
@@ -209,7 +176,7 @@ public class DriveYourselfAgent : Agent
         carController.canGoReverseNow = false;
         carController.currentGear = 1;
         //carController.GetComponent<Rigidbody>().isKinematic = true;
-        //carController.engineRunning = false; 
+        //carController.engineRunning = false;
         //carController.engineRPMRaw = 0;
 
         lastLap = 0;
@@ -254,12 +221,12 @@ public class DriveYourselfAgent : Agent
 
         sensor.AddObservation(vehicleData.GetSpeed() / 100f);
         sensor.AddObservation(Mathf.Clamp(vehicleData.GetAccelleration(), 0f, 20f) / 20f);
-        sensor.AddObservation(Mathf.Clamp(vehicleData.GetDtC() / maxAllowedRewardDtc, -1f, 1f));
+        sensor.AddObservation(Mathf.Abs(vehicleData.GetDtC()) / maxAllowedRewardDtc);
+        sensor.AddObservation(Mathf.Abs(vehicleData.ReturnLastDtC()) < 0.01f ? 0f : Mathf.Sign(vehicleData.ReturnLastDtC()));
 
         sensor.AddObservation(carController.throttleInput);
         sensor.AddObservation(carController.brakeInput);
         sensor.AddObservation(currentSteeringAngle / carController.steerAngle);
-        sensor.AddObservation(carController.currentGear / 6.0f);
 
         Vector3 localVelocity = carController.transform.InverseTransformDirection(carRb.linearVelocity);
         sensor.AddObservation(localVelocity.x / 10.0f);
@@ -268,10 +235,10 @@ public class DriveYourselfAgent : Agent
         GameObject currentSegment = vehicleData.GetRoadSegment();
         switch (currentSegment.name.Split("_")[1])
         {
-            case "Left":
+            case "left":
                 sensor.AddObservation(-1);
                 break;
-            case "Right":
+            case "right":
                 sensor.AddObservation(1);
                 break;
             default:
@@ -313,36 +280,20 @@ public class DriveYourselfAgent : Agent
         //float currentAccPerSecond = vehicleData.GetAccelleration() / updateDiff;
         //float currentAccOffset = Mathf.Abs(currentAccPerSecond) - maxAllowedSafeAcc;
 
-        // Move and Steer
-        float rawForwardAction = actions.ContinuousActions[0];
-        if (rawForwardAction > 0.01f)
+        float acc = 0.0f;
+        float brk = 0.0f;
+
+        if (actions.ContinuousActions[0] >= 0)
         {
-            if (carController.currentGear == 0 || carController.direction == -1) 
-            {
-                targetThrottle = Mathf.Lerp(0.15f, 1.0f, rawForwardAction);
-            }
-            else 
-            {
-                targetThrottle = rawForwardAction; 
-            }
-            
-            targetBrake = 0.0f;
-        }
-        else if (rawForwardAction < -0.01f)
-        {
-            targetBrake = Mathf.Abs(rawForwardAction);
-            targetThrottle = 0.0f;
+            acc = actions.ContinuousActions[0];
         }
         else
         {
-            targetThrottle = 0.0f;
-            targetBrake = 0.0f;
+            brk = Mathf.Abs(actions.ContinuousActions[0]);
         }
-        
-        targetSteer = actions.ContinuousActions[1];
 
         // Time penalty
-        AddReward(-0.01f);
+        //AddReward(-0.005f);
 
         // Engine Inertia
         /*
@@ -352,68 +303,55 @@ public class DriveYourselfAgent : Agent
         }
         */
 
+        // Steering check
+        float targetSteer = actions.ContinuousActions[1];
+        currentSteeringAngle = Mathf.MoveTowards(currentSteeringAngle, targetSteer, (1 / steeringSpeed) * Time.fixedDeltaTime);
+
+        // Move
+        float currentThrottle = 0.0f;
+        float currentBrake = 0.0f;
+        float currentSteer = 0.0f;
+        if (!carRb.isKinematic)
+        {
+            currentThrottle = carController.throttleInput = acc;
+            currentBrake = carController.brakeInput = brk;
+            currentSteer = carController.steerInput = currentSteeringAngle;
+        }
+
         // Input Text
-        agentAccText.text = "Acc: " + currentThrottle.ToString("F4");
-        agentBrkText.text = "Brk: " + currentBrake.ToString("F4");
+        agentAccText.text = "Acc: " + acc.ToString("F4");
+        agentBrkText.text = "Brk: " + brk.ToString("F4");
         agentStrText.text = "Str: " + actions.ContinuousActions[1].ToString("F4");
-        agentSpdText.text = "Spd: " + vehicleData.GetSpeed().ToString("F1") + " km/h";
+        agentSpdText.text = "Spd: " + carController.speed.ToString("F1") + " km/h";
         agentRpmText.text = "RPM: " + carController.engineRPM.ToString("F0") + " - G: " + carController.currentGear.ToString();
         agentDtCText.text = "DtC: " + vehicleData.ReturnLastDtC() + " m";
 
         // Rewards
         //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
         float currentProgress = vehicleData.GetProgress();
-        float deltaProgress = 0.0f;
+        float deltaProgress = Mathf.Max(0.001f, currentProgress - lastLapProgress);
 
-        if (startedFirstLap)
+        if (startedFirstLap && (deltaProgress > 0.001f || (vehicleData.GetLap() > lastLap && currentProgress < 50.0f)))
         {
-            if (lastLap == 0) lastLap = vehicleData.GetLap();
-            if (vehicleData.GetLap() > lastLap && currentProgress < 50.0f)
+            if (currentProgress < 50.0f)
             {
-                deltaProgress = (100.0f - lastLapProgress) + currentProgress;
                 lastLap = vehicleData.GetLap();
-                lastLapProgress = currentProgress;
             }
-            else if (currentProgress > lastLapProgress)
-            {
-                deltaProgress = currentProgress - lastLapProgress;
-                lastLapProgress = currentProgress;
-            }
+            lastLapProgress = currentProgress;
 
-            if (lastLap > 0 && deltaProgress > 0.001f)
+            if (lastLap > 0)
             {
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
 
                 float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
                 float weightRatio = DtCRewardPercent / 100.0f;
 
-                
-                // Progress (Always rewarded)
-                //float normalization = 100.0f / Mathf.Max(targetSpeed, 10.0f);
-                float progressReward = deltaProgress;
 
-                
                 // Speed
-                float speedAchievementRatio = 0.0f;
-                float currentSpeed = vehicleData.GetSpeed();
+                float speedError = Mathf.Abs(vehicleData.GetSpeed() - targetSpeed);
+                float speedMultiplier = CalculateCliffReward(speedError, 10.0f, 10.0f);
 
-                if (currentSpeed <= targetSpeed)
-                {
-                    speedAchievementRatio = Mathf.Clamp01(currentSpeed / Mathf.Max(targetSpeed, 1.0f)); 
-                }
-                else
-                {
-                    float overSpeedPenalty = Mathf.Clamp01((currentSpeed - targetSpeed) / 20.0f);
-                    speedAchievementRatio = 1.0f - overSpeedPenalty;
-                }
 
-                    // Reward only for Progress + Speed
-                    float finalRewardSpeed = progressReward * speedAchievementRatio;
-                    finalRewardSpeed = Mathf.Max(progressReward * 0.10f, finalRewardSpeed);
-                    AddReward(finalRewardSpeed);
-                
-
-                    
                 // DtC
                 float dnaTargetLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, weightRatio);
                 float currentEffectiveLimit = Mathf.Lerp(maxAllowedRewardDtc, dnaTargetLimit, dtcProgression);
@@ -446,27 +384,28 @@ public class DriveYourselfAgent : Agent
 
 
                 // Final
-                //float combinedMultiplier = speedPenaltyMultiplier * dtcMultiplier * accMultiplier * smoothMultiplier;
-                //float finalReward = deltaProgress * normalization * combinedMultiplier;
-                //AddReward(finalReward);
+                float combinedMultiplier = speedMultiplier * dtcMultiplier * accMultiplier * smoothMultiplier;
+
+                float normalization = 100.0f / Mathf.Max(targetSpeed, 10.0f);
+                float finalReward = deltaProgress * normalization * combinedMultiplier;
+
+                AddReward(finalReward);
 
 
                 // Logging
-                episodeProgressReward += finalRewardSpeed;
-                
-                episodeSpeedPenalty += (1.0f - speedAchievementRatio);
+                episodeProgressReward += finalReward;
+                episodeSpeedReward += speedMultiplier;
                 episodeDtCReward += dtcMultiplier;
-                episodeSpeedDeviation += Mathf.Abs(currentSpeed - targetSpeed);
+                episodeSpeedDeviation += speedError;
                 episodeDtCDeviation += currentDtC;
                 episodeSmoothnessPenalty += (1.0f - smoothMultiplier);
 
                 lastThrottleInput = currentThrottle;
                 lastBrakeInput = currentBrake;
-                lastSteeringAction = currentSteeringAngle;
+                lastSteeringAction = currentSteer;
 
-                if (lastLap > endEpisodeAfterCompletedLaps && currentProgress > 33.33f && currentProgress < 80.0f)
+                if (lastLap > endEpisodeAfterCompletedLaps && currentProgress > 33.33f)
                 {
-                    AddReward(10.0f);
                     InjectStats();
                     if (this.GetComponent<AgentSelector>().boActive)
                     {
@@ -474,18 +413,15 @@ public class DriveYourselfAgent : Agent
                     }
                     else
                     {
-                        Academy.Instance.StatsRecorder.Add("Custom/Episodes_Completed", 1.0f, StatAggregationMethod.Sum);
                         EndEpisode();
-                        return;
                     }
                 }
             }
         }
-        if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
+        else if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
         {
-            AddReward(-10.0f);
+            AddReward(-1.0f);
             //Debug.LogWarning($"Episode end: Car stuck (or agent didn't move)!");
-            Academy.Instance.StatsRecorder.Add("Custom/Episodes_Stuck", 1.0f, StatAggregationMethod.Sum);
             InjectStats();
             EndEpisode();
             return;
@@ -493,9 +429,8 @@ public class DriveYourselfAgent : Agent
 
         if (carController.transform.position.y < endEpisodeCarYPosition)
         {
-            AddReward(-20.0f);
+            AddReward(-1.0f);
             //Debug.LogWarning("Episode end: Car out of Map!");
-            Academy.Instance.StatsRecorder.Add("Custom/Episodes_Fell_Off", 1.0f, StatAggregationMethod.Sum);
             InjectStats();
             EndEpisode();
             return;
@@ -510,19 +445,11 @@ public class DriveYourselfAgent : Agent
         }
 
         long stepCount = fixedUpdateCounter > 0 ? fixedUpdateCounter : 1;
-        float lapsCompleted = 0f;
+        float lapsCompleted = (vehicleData.GetLap() - 1) + (vehicleData.GetProgress() / 100f);
         //Debug.LogWarning("Completed Laps: " + lapsCompleted);
-        if (startedFirstLap)
+        if (!startedFirstLap)
         {
-            if (ingameSecondsSinceStartup < 10.0d)
-            {
-                lapsCompleted = lastLapProgress / 100f;
-            }
-            else
-            {
-                int safeLap = lastLap > 0 ? lastLap : 1;
-                lapsCompleted = (safeLap - 1) + (lastLapProgress / 100f);
-            }
+            lapsCompleted = 0;
         }
 
         var stats = Academy.Instance.StatsRecorder;
@@ -531,7 +458,7 @@ public class DriveYourselfAgent : Agent
         stats.Add("Custom/Effective Difficulty", effectiveRatio, StatAggregationMethod.Average);
         stats.Add("Custom/Laps Completed", lapsCompleted, StatAggregationMethod.Average);
         stats.Add("Custom/Total Progress Reward", episodeProgressReward, StatAggregationMethod.Average);
-        stats.Add("Custom/Total Speed Penalty", episodeSpeedPenalty, StatAggregationMethod.Average);
+        stats.Add("Custom/Total Speed Reward", episodeSpeedReward, StatAggregationMethod.Average);
         stats.Add("Custom/Total DtC Reward", episodeDtCReward, StatAggregationMethod.Average);
         stats.Add("Custom/Avg Speed Deviation", episodeSpeedDeviation / stepCount, StatAggregationMethod.Average);
         stats.Add("Custom/Avg DtC Deviation", episodeDtCDeviation / stepCount, StatAggregationMethod.Average);

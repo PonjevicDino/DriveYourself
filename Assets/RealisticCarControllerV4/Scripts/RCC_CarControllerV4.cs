@@ -1528,7 +1528,7 @@ public class RCC_CarControllerV4 : RCC_Core {
                 case SteeringWheelRotateAround.XAxis:
                     SteeringWheel.transform.localRotation = Quaternion.Lerp(
                         SteeringWheel.transform.localRotation,
-                        orgSteeringWheelRot * Quaternion.AngleAxis(((steerInput * steerAngle) * -steeringWheelAngleMultiplier), Vector3.right),
+                        orgSteeringWheelRot * Quaternion.AngleAxis(steerInput * -steeringWheelAngleMultiplier, Vector3.right),
                         Time.deltaTime * 25f
                     );
 
@@ -1537,7 +1537,7 @@ public class RCC_CarControllerV4 : RCC_Core {
                 case SteeringWheelRotateAround.YAxis:
                     SteeringWheel.transform.localRotation = Quaternion.Lerp(
                         SteeringWheel.transform.localRotation,
-                        orgSteeringWheelRot * Quaternion.AngleAxis(((steerInput * steerAngle) * -steeringWheelAngleMultiplier), Vector3.up),
+                        orgSteeringWheelRot * Quaternion.AngleAxis(steerInput * -steeringWheelAngleMultiplier, Vector3.up),
                         Time.deltaTime * 25f
                     );
                     break;
@@ -1545,7 +1545,7 @@ public class RCC_CarControllerV4 : RCC_Core {
                 case SteeringWheelRotateAround.ZAxis:
                     SteeringWheel.transform.localRotation = Quaternion.Lerp(
                         SteeringWheel.transform.localRotation,
-                        orgSteeringWheelRot * Quaternion.AngleAxis(((steerInput * steerAngle) * -steeringWheelAngleMultiplier), Vector3.forward),
+                        orgSteeringWheelRot * Quaternion.AngleAxis(steerInput * -steeringWheelAngleMultiplier, Vector3.forward),
                         Time.deltaTime * 25f
                     );
                     break;

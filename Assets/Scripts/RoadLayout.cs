@@ -31,11 +31,19 @@ public class RoadLayout : MonoBehaviour
 
     public void CheckIfNextSegmentHasBeenReached()
     {
-        Vector3 toTarget = nextPoint.position - carController.transform.position;
-        float distance = toTarget.magnitude;
+        Vector2 carPos2D = new Vector2(carController.transform.position.x, carController.transform.position.z);
+        Vector2 targetPos2D = new Vector2(nextPoint.position.x, nextPoint.position.z);
+        float distance = Vector2.Distance(carPos2D, targetPos2D);
 
-        float threshHoldMult = Mathf.Clamp(carController.speed / 100, 1, 9);
-        if (distance < reachThreshold * threshHoldMult)
+        float threshHoldMult = Mathf.Clamp(carController.speed / 50f, 1f, 2f); 
+        float effectiveThreshold = reachThreshold * threshHoldMult;
+        
+        // Fallback
+        int nextNextIndex = (currentSegmentIndex + 1) % roadSegments.Count;
+        Vector2 nextNextPos2D = new Vector2(roadSegments[nextNextIndex].BeginPoint.position.x, roadSegments[nextNextIndex].BeginPoint.position.z);
+        float distanceToNextNext = Vector2.Distance(carPos2D, nextNextPos2D);
+        
+        if (distance < effectiveThreshold || distanceToNextNext < distance)
         {
             if (currentSegmentIndex == roadSegments.Count - 1)
             {

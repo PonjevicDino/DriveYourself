@@ -7,7 +7,7 @@ public class AgentModelLookup : EditorWindow
 {
     private string sourceFolder = "";
     private string targetFolder = "";
-    private string runPrefix = "Run002";
+    private string runPrefix = "SpeedTest";
     private string modelFolderName = "TestModel";
     private bool debugMode = true;
 
@@ -50,7 +50,7 @@ public class AgentModelLookup : EditorWindow
 
         EditorGUILayout.LabelField("Configuration", EditorStyles.boldLabel);
         runPrefix = EditorGUILayout.TextField("Run Prefix", runPrefix);
-        modelFolderName = EditorGUILayout.TextField("Inner Model Folder", modelFolderName);
+        modelFolderName = EditorGUILayout.TextField("Inner Model Name (.onnx)", modelFolderName);
         debugMode = EditorGUILayout.Toggle("Enable Debug Logs", debugMode);
 
         GUILayout.Space(10);
@@ -94,8 +94,8 @@ public class AgentModelLookup : EditorWindow
         string cleanModelName = modelFolderName.Trim();
 
         Log($"Starting... Looking for Prefix: '{cleanPrefix}' inside '{sourceFolder}'");
-
-        string pattern = $@"^{Regex.Escape(cleanPrefix)}-Agent_(\d+)[-_](S\d+)-(W\d+)-(A\d+)-(Sm\d+)$";
+        
+        string pattern = $@"^{Regex.Escape(cleanPrefix)}-Agent_(\d+)[-_](S\d+)(?:-(W\d+))?(?:-(A\d+))?(?:-(Sm\d+))?$";
 
         Log($"Using Flexible Regex: {pattern}");
         Regex nameRegex = new Regex(pattern);
@@ -113,11 +113,14 @@ public class AgentModelLookup : EditorWindow
             Match match = nameRegex.Match(dirName);
             if (match.Success)
             {
+                // Mandatory groups
                 string agentID = match.Groups[1].Value;
                 string speed = match.Groups[2].Value;
-                string weight = match.Groups[3].Value;
-                string acc = match.Groups[4].Value;
-                string smooth = match.Groups[5].Value;
+
+                // Optional groups (Fallback to 00 if they weren't in the folder name)
+                string weight = match.Groups[3].Success ? match.Groups[3].Value : "W00";
+                string acc = match.Groups[4].Success ? match.Groups[4].Value : "A00";
+                string smooth = match.Groups[5].Success ? match.Groups[5].Value : "Sm00";
 
                 string expectedOnnxPath = Path.Combine(dirPath, cleanModelName + ".onnx");
 
@@ -126,7 +129,7 @@ public class AgentModelLookup : EditorWindow
                     string finalTargetDir = Path.Combine(targetFolder, cleanPrefix);
                     if (!Directory.Exists(finalTargetDir)) Directory.CreateDirectory(finalTargetDir);
 
-                    string newName = $"Agent_{agentID}-{speed}-{weight}-{acc}-{smooth}.onnx";
+                    string newName = $"{cleanPrefix}-Agent_{agentID}-{speed}-{weight}-{acc}-{smooth}.onnx";
                     string destPath = Path.Combine(finalTargetDir, newName);
 
                     File.Copy(expectedOnnxPath, destPath, true);
@@ -138,7 +141,6 @@ public class AgentModelLookup : EditorWindow
                     Log($"FAIL: Found folder '{dirName}' but missing '{cleanModelName}.onnx' inside it.");
                 }
             }
-
             else if (dirName.StartsWith(cleanPrefix))
             {
                 Log($"FAIL Regex: '{dirName}' skipped. Pattern mismatch.");

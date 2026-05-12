@@ -139,6 +139,11 @@ public class AgentSelector : MonoBehaviour
         string bestFilePath = "";
         float minDistance = float.MaxValue;
         string bestFileName = "";
+        
+        int bestFileSpeed = 0;
+        int bestFileWeight = 0;
+        int bestFileAcc = 0;
+        int bestFileSmooth = 0;
 
         foreach (string file in files)
         {
@@ -164,6 +169,11 @@ public class AgentSelector : MonoBehaviour
                     minDistance = dist;
                     bestFilePath = file;
                     bestFileName = fileName;
+                    
+                    bestFileSpeed = fileSpeed;
+                    bestFileWeight = fileWeight;
+                    bestFileAcc = fileAcc;
+                    bestFileSmooth = fileSmooth;
                 }
             }
         }
@@ -181,7 +191,7 @@ public class AgentSelector : MonoBehaviour
             {
                 behaviorParameters.Model = model;
                 currentLoadedModel = bestFileName;
-                SetModelRewardStats(model.name);
+                SetModelRewardStats(bestFileSpeed, bestFileWeight, bestFileAcc, bestFileSmooth);
             }
             else
             {
@@ -193,21 +203,21 @@ public class AgentSelector : MonoBehaviour
 #endif
     }
 
-    private void SetModelRewardStats(string name)
+    private void SetModelRewardStats(int fileSpeed, int fileWeight, int fileAcc, int fileSmooth)
     {
-        int targetSpeed = int.Parse(name.Split("-")[1].Substring(1));
-        int speedRewardPercent = int.Parse(name.Split("-")[2].Substring(1));
-        int accTime = int.Parse(name.Split("-")[3].Substring(1));
-        int smoothingValue = int.Parse(name.Split("-")[4].Substring(2));
-
-        float smoothSeconds = (smoothingValue - 2.0f) / 8.0f * 6.0f;
-        float calculatedThreshold = 1.0f;
-        if (smoothSeconds > 0.1f)
+        int speedRewardPercent = fileWeight; 
+        int accTime = fileAcc == 0 ? 10 : fileAcc; 
+        float calculatedThreshold = 0.0f; 
+        if (fileSmooth != 0) 
         {
-            calculatedThreshold = 1.0f / (smoothSeconds * 50.0f);
+            float smoothSeconds = (fileSmooth - 2.0f) / 8.0f * 6.0f;
+            if (smoothSeconds > 0.1f)
+            {
+                calculatedThreshold = 1.0f / (smoothSeconds * 50.0f);
+            }
         }
-
-        agent.targetSpeed = targetSpeed;
+        
+        agent.targetSpeed = fileSpeed;
         agent.DtCRewardPercent = speedRewardPercent;
         agent.accelTime0to100 = accTime;
         agent.inputSmoothnessThreshold = calculatedThreshold;

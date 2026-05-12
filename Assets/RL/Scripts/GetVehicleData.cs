@@ -86,7 +86,7 @@ public class GetVehicleData : MonoBehaviour
         List<float> pairDistances = new List<float>();
         Vector3 vehiclePos = carController.transform.position;
 
-        GameObject nextReadSegment = roadSegment.transform.GetSiblingIndex() + 1 < roadSegment.transform.parent.childCount - 1 ? roadSegment.transform.parent.GetChild(roadSegment.transform.GetSiblingIndex() + 1).gameObject : roadSegment.transform.parent.GetChild(0).gameObject;
+        GameObject nextReadSegment = roadSegment.transform.GetSiblingIndex() + 1 < roadSegment.transform.parent.childCount ? roadSegment.transform.parent.GetChild(roadSegment.transform.GetSiblingIndex() + 1).gameObject : roadSegment.transform.parent.GetChild(0).gameObject;
         for (int pairIndex = 1; pairIndex <= 10; pairIndex++)
         {
             Vector3 leftPairPos = roadSegment.transform.Find("DtC-Tracker").Find("P" + pairIndex + "L").transform.position;
@@ -112,7 +112,19 @@ public class GetVehicleData : MonoBehaviour
             pairDistances.Add(Vector2.Distance(new Vector2(leftNextPairPos.x, leftNextPairPos.z), new Vector2(vehiclePos.x, vehiclePos.z)) + Vector2.Distance(new Vector2(rightNextPairPos.x, rightNextPairPos.z), new Vector2(vehiclePos.x, vehiclePos.z)));
         }
 
-        segmentProgress = nearestPair = pairDistances.IndexOf(pairDistances.Min());
+        int minIndex = 0;
+        float minValue = pairDistances[0];
+
+        for (int i = 1; i < pairDistances.Count; i++)
+        {
+            if (pairDistances[i] < minValue)
+            {
+                minValue = pairDistances[i];
+                minIndex = i;
+            }
+        }
+
+        segmentProgress = nearestPair = minIndex;
 
         Vector3 pairLPos; Vector3 pairRPos;
         if (nearestPair >= 10)
@@ -157,7 +169,7 @@ public class GetVehicleData : MonoBehaviour
 
     public GameObject GetNextRoadSegment(GameObject roadSegment)
     {
-        return roadSegment.transform.GetSiblingIndex() + 1 < roadSegment.transform.parent.childCount - 1 ? roadSegment.transform.parent.GetChild(roadSegment.transform.GetSiblingIndex() + 1).gameObject : roadSegment.transform.parent.GetChild(0).gameObject; ;
+        return roadSegment.transform.GetSiblingIndex() + 1 < roadSegment.transform.parent.childCount ? roadSegment.transform.parent.GetChild(roadSegment.transform.GetSiblingIndex() + 1).gameObject : roadSegment.transform.parent.GetChild(0).gameObject; ;
     }
 
     public void ResetVars()
