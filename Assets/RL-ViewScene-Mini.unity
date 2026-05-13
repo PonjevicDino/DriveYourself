@@ -767,7 +767,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549318363046129, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8573549318809938867, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_IsActive
@@ -1882,7 +1882,7 @@ MonoBehaviour:
     VectorActionDescriptions: []
     VectorActionSpaceType: 1
     hasUpgradedBrainParametersWithActionSpec: 1
-  m_Model: {fileID: 0}
+  m_Model: {fileID: 5022602860645237092, guid: aee1093ca883a0d439d05c933415a3d1, type: 3}
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: TestModel
@@ -1914,11 +1914,11 @@ MonoBehaviour:
   agentSpdText: {fileID: 1073547967}
   agentRpmText: {fileID: 868582843}
   agentDtCText: {fileID: 880381071}
-  targetSpeed: 60
+  targetSpeed: 20
   maxAllowedRewardDtc: 5
-  DtCRewardPercent: 0
-  accelTime0to100: 0
-  inputSmoothnessThreshold: 1
+  DtCRewardPercent: 100
+  accelTime0to100: 10
+  inputSmoothnessThreshold: 0
   minCurriculumTrainingSpeed: 40
   steeringSpeed: 0.25
   pedalSpeed: 0.25
@@ -1996,18 +1996,18 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 200363779}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2b95f1f7289d1f541993cb87561d4645, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rootFolder: Assets/TrainedModels
-  runPrefix: Run001
+  rootFolder: Assets/RL/Models
+  runPrefix: SpeedDtCTest
   targetSpeed: 20
-  targetWeight: 85
-  targetAccelTime: 10
-  targetSmoothness: 5
-  currentLoadedModel: None
+  targetWeight: 100
+  targetAccelTime: 20
+  targetSmoothness: 10
+  currentLoadedModel: Agent_05-S020-W100-A10-Sm0.onnx
   boActive: 0
   boStartCommandGiven: 0
 --- !u!1001 &359858341
@@ -6876,7 +6876,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2f30602038963442b284fb2050dbf26, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  agents: 64
+  agents: 1
 --- !u!1001 &958148086
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -7526,7 +7526,7 @@ Camera:
     m_Bits: 4294967295
   m_RenderingPath: -1
   m_TargetTexture: {fileID: 0}
-  m_TargetDisplay: 1
+  m_TargetDisplay: 0
   m_TargetEye: 3
   m_HDR: 0
   m_AllowMSAA: 0
@@ -14460,7 +14460,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!81 &1823688465
 AudioListener:
   m_ObjectHideFlags: 0

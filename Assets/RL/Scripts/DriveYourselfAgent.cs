@@ -383,10 +383,6 @@ public class DriveYourselfAgent : Agent
             if (lastLap > 0 && deltaProgress > 0.001f)
             {
                 timeAtLastSignificantMove = ingameSecondsSinceStartup;
-
-                float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
-                float weightRatio = DtCRewardPercent / 100.0f;
-
                 
                 // Progress (Always rewarded)
                 //float normalization = 100.0f / Mathf.Max(targetSpeed, 10.0f);
@@ -394,35 +390,48 @@ public class DriveYourselfAgent : Agent
 
                 
                 // Speed
-                float speedAchievementRatio = 0.0f;
+                float speedScore = 0.0f;
                 float currentSpeed = vehicleData.GetSpeed();
 
                 if (currentSpeed <= targetSpeed)
                 {
-                    speedAchievementRatio = Mathf.Clamp01(currentSpeed / Mathf.Max(targetSpeed, 1.0f)); 
+                    speedScore = Mathf.Clamp01(currentSpeed / Mathf.Max(targetSpeed, 1.0f)); 
                 }
                 else
                 {
                     float overSpeedPenalty = Mathf.Clamp01((currentSpeed - targetSpeed) / 20.0f);
-                    speedAchievementRatio = 1.0f - overSpeedPenalty;
+                    speedScore = 1.0f - overSpeedPenalty;
                 }
 
                     // Reward only for Progress + Speed
-                    float finalRewardSpeed = progressReward * speedAchievementRatio;
-                    finalRewardSpeed = Mathf.Max(progressReward * 0.10f, finalRewardSpeed);
-                    AddReward(finalRewardSpeed);
-                
-
+                    // float finalReward = progressReward * speedScore;
+                    // finalReward= Mathf.Max(progressReward * 0.10f, finalRewardSpeed);
+                    // AddReward(finalReward);
+                    
                     
                 // DtC
-                float dnaTargetLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, weightRatio);
-                float currentEffectiveLimit = Mathf.Lerp(maxAllowedRewardDtc, dnaTargetLimit, dtcProgression);
+                float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
+                float weightRatio = DtCRewardPercent / 100.0f;
+                
+                float dtcTargetLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, weightRatio);
+                float currentEffectiveLimit = Mathf.Lerp(maxAllowedRewardDtc, dtcTargetLimit, dtcProgression);
 
-                float dtcMultiplier = 0.0f;
-                if (currentDtC <= currentEffectiveLimit)
-                {
-                    dtcMultiplier = 1.0f - (currentDtC / currentEffectiveLimit);
-                }
+                float dtcScore = Mathf.Clamp01(1.0f - (currentDtC / currentEffectiveLimit));
+                
+                    // Reward for Progress + Speed + DtC
+                    float universalFloor = 0.40f;
+                    float dtcMultiplier = Mathf.Lerp(universalFloor, 1.0f, dtcScore);
+                    float combinedMultiplier = speedScore * dtcMultiplier;
+                    float finalReward = progressReward * combinedMultiplier;
+                    
+                    bool isSpeeding = currentSpeed > targetSpeed + 5.0f;
+                    bool isCornerCutting = currentDtC > (currentEffectiveLimit + 1.0f);
+                    if (!isSpeeding && !isCornerCutting)
+                    {
+                        finalReward = Mathf.Max(progressReward * universalFloor, finalReward);
+                    }
+                    finalReward = Mathf.Max(progressReward * universalFloor, finalReward);
+                    AddReward(finalReward);
 
 
                 // Acceleration
@@ -452,17 +461,17 @@ public class DriveYourselfAgent : Agent
 
 
                 // Logging
-                episodeProgressReward += finalRewardSpeed;
+                episodeProgressReward += finalReward;
                 
-                episodeSpeedPenalty += (1.0f - speedAchievementRatio);
-                episodeDtCReward += dtcMultiplier;
+                episodeSpeedPenalty += (1.0f - speedScore);
+                episodeDtCReward += dtcScore;
                 episodeSpeedDeviation += Mathf.Abs(currentSpeed - targetSpeed);
                 episodeDtCDeviation += currentDtC;
                 episodeSmoothnessPenalty += (1.0f - smoothMultiplier);
 
                 lastThrottleInput = currentThrottle;
                 lastBrakeInput = currentBrake;
-                lastSteeringAction = currentSteeringAngle;
+                lastSteeringAction = targetSteer;
 
                 if (lastLap > endEpisodeAfterCompletedLaps && currentProgress > 33.33f && currentProgress < 80.0f)
                 {

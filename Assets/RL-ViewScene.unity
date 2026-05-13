@@ -1887,7 +1887,7 @@ MonoBehaviour:
     VectorActionDescriptions: []
     VectorActionSpaceType: 1
     hasUpgradedBrainParametersWithActionSpec: 1
-  m_Model: {fileID: 5022602860645237092, guid: d8563f4c52698584fb95ee71df52fe3f, type: 3}
+  m_Model: {fileID: 5022602860645237092, guid: 2464eeba080e5414ca0d603e390a2b53, type: 3}
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: TestModel
@@ -1919,14 +1919,15 @@ MonoBehaviour:
   agentSpdText: {fileID: 1073547967}
   agentRpmText: {fileID: 868582843}
   agentDtCText: {fileID: 880381071}
-  targetSpeed: 40
-  maxAllowedRewardDtc: 4
-  DtCRewardPercent: 33
+  targetSpeed: 60
+  maxAllowedRewardDtc: 5
+  DtCRewardPercent: 25
   accelTime0to100: 10
-  inputSmoothnessThreshold: 1
+  inputSmoothnessThreshold: 0
   minCurriculumTrainingSpeed: 40
   steeringSpeed: 0.25
-  endEpisodeAfterCompletedLaps: 10
+  pedalSpeed: 0.25
+  endEpisodeAfterCompletedLaps: 3
   endEpisodeCarYPosition: -1
   endEpisodeCarStuckSeconds: 15
   startedFirstLap: 0
@@ -2006,12 +2007,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rootFolder: Assets/RL/Models
-  runPrefix: SpeedTest
-  targetSpeed: 40
-  targetWeight: 100
+  runPrefix: SpeedDtCTest
+  targetSpeed: 60
+  targetWeight: 25
   targetAccelTime: 20
   targetSmoothness: 10
-  currentLoadedModel: Agent_02-S040-W00-A00-Sm00.onnx
+  currentLoadedModel: Agent_12-S060-W25-A10-Sm0.onnx
   boActive: 0
   boStartCommandGiven: 0
 --- !u!1 &355382647
@@ -7191,7 +7192,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2f30602038963442b284fb2050dbf26, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  agents: 1
+  agents: 64
 --- !u!1001 &958148086
 PrefabInstance:
   m_ObjectHideFlags: 0
