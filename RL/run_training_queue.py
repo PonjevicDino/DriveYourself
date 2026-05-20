@@ -191,8 +191,10 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index, dashboa
         with open(temp_config_path, 'w') as f:
             yaml.dump(local_config, f)
 
+        mlagents_path = r"C:\Users\phili\anaconda3\envs\mlagents\Scripts\mlagents-learn.exe"
+
         cmd = [
-            "mlagents-learn", temp_config_path,
+            mlagents_path, temp_config_path,
             f"--run-id={run_id}",
             f"--env={args.env}",
             f"--base-port={str(assigned_port)}",
@@ -203,7 +205,7 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index, dashboa
             "--no-graphics"
         ]
 
-        # Read output line-by-line
+        # Read output line-by-line (Notice shell=True is GONE because we don't need it anymore!)
         with open(log_file_path, "w") as log_file:
             process = subprocess.Popen(
                 cmd,

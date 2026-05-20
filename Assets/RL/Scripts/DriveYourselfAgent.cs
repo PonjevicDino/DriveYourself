@@ -430,7 +430,6 @@ public class DriveYourselfAgent : Agent
                     {
                         finalReward = Mathf.Max(progressReward * universalFloor, finalReward);
                     }
-                    finalReward = Mathf.Max(progressReward * universalFloor, finalReward);
                     AddReward(finalReward);
 
 
