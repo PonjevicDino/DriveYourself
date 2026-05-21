@@ -16,30 +16,23 @@ BASE_PORT = 5005
 PORT_GAP = 64
 MAX_RETRIES = 1
 
-# Regex to catch the step count from ML-Agents terminal output
 STEP_PATTERN = re.compile(r"Step:\s*(\d+)")
 
 
-# ==========================================
-# GUI DASHBOARD CLASS (Runs on Main Thread)
-# ==========================================
 class TrainingDashboard:
     def __init__(self, total_agents):
         self.root = tk.Tk()
         self.root.title("ML-Agents Matrix Training Dashboard")
         self.root.geometry("650x800")
 
-        # Style
         style = ttk.Style(self.root)
         style.theme_use('clam')
 
-        # Main Progress Header
         self.main_lbl = ttk.Label(self.root, text=f"Overall Progress: 0/{total_agents}", font=("Arial", 12, "bold"))
         self.main_lbl.pack(pady=10)
         self.main_progress = ttk.Progressbar(self.root, maximum=total_agents, length=600)
         self.main_progress.pack(pady=5)
 
-        # Scrollable Canvas Setup (For 256 Agents)
         self.canvas = tk.Canvas(self.root, borderwidth=0, highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = ttk.Frame(self.canvas)
@@ -54,25 +47,20 @@ class TrainingDashboard:
         self.canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
         self.scrollbar.pack(side="right", fill="y")
 
-        # Enable Mousewheel scrolling
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
-        # Thread-safe data storage
         self.agent_widgets = {}
         self.data_lock = threading.Lock()
         self.agent_data = {}
         self.main_completed = 0
         self.total_agents = total_agents
 
-        # Start the UI refresh loop
         self._refresh()
 
     def _on_mousewheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def init_agents_ui(self, current_queue, steps):
-        """Builds the UI rows (Called safely on the main thread)"""
-        # Clear old widgets if this is a retry batch
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
@@ -84,7 +72,6 @@ class TrainingDashboard:
                 run_id = agent["id"]
                 self.agent_data[run_id] = {"step": 0, "status": "Waiting...", "max_steps": steps}
 
-                # Create Row Frame
                 frame = ttk.Frame(self.scrollable_frame)
                 frame.pack(fill="x", padx=5, pady=4)
 
@@ -100,7 +87,6 @@ class TrainingDashboard:
                 self.agent_widgets[run_id] = {"prog": prog, "stat": stat}
 
     def update_agent(self, run_id, step, status):
-        """Called by background workers to update data"""
         with self.data_lock:
             if run_id in self.agent_data:
                 self.agent_data[run_id]["step"] = step
@@ -115,7 +101,6 @@ class TrainingDashboard:
             self.main_lbl.config(text=title)
 
     def _refresh(self):
-        """Loops every 200ms to update the GUI from the data dictionary"""
         with self.data_lock:
             self.main_progress["value"] = self.main_completed
 
@@ -134,10 +119,6 @@ class TrainingDashboard:
 
         self.root.after(200, self._refresh)
 
-
-# ==========================================
-# SYSTEM/TRAINING LOGIC (Background Thread)
-# ==========================================
 
 def is_admin():
     try:
@@ -168,7 +149,6 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index, dashboa
 
         dashboard.update_agent(run_id, 0, "Training")
 
-        # Terminal Output
         print(
             f" [Worker {worker_index}] STARTING: {run_id} | Target: {speed}km/h | DtC: {dtc_weight} | Port: {assigned_port}")
 
@@ -205,7 +185,6 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index, dashboa
             "--no-graphics"
         ]
 
-        # Read output line-by-line (Notice shell=True is GONE because we don't need it anymore!)
         with open(log_file_path, "w") as log_file:
             process = subprocess.Popen(
                 cmd,
@@ -254,7 +233,6 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index, dashboa
 
 
 def background_execution_thread(args, agents_list, base_yaml_config, dashboard):
-    """Manages the queue and retry logic outside the GUI loop"""
     current_queue = agents_list
 
     for attempt in range(1, MAX_RETRIES + 2):
@@ -265,9 +243,8 @@ def background_execution_thread(args, agents_list, base_yaml_config, dashboard):
         print(f" STARTING BATCH ATTEMPT {attempt} ({len(current_queue)} agents remaining)")
         print(f"==================================================\n")
 
-        # Tell the GUI on the main thread to build the rows
         dashboard.root.after(0, dashboard.init_agents_ui, current_queue, args.steps)
-        time.sleep(1)  # Brief pause to let UI render
+        time.sleep(1)
 
         next_queue = []
 
@@ -301,10 +278,6 @@ def background_execution_thread(args, agents_list, base_yaml_config, dashboard):
     print(f"==================================================")
 
 
-# ==========================================
-# BOOTSTRAP
-# ==========================================
-
 if __name__ == "__main__":
     if not is_admin():
         print("Administrator rights missing! Requesting elevation...")
@@ -330,21 +303,18 @@ if __name__ == "__main__":
         base_yaml_config = yaml.safe_load(f)
 
     print(f"==================================================")
-    print(f" PARALLEL TRAINING MANAGER STARTED (GUI MODE)")
+    print(f" PARALLEL TRAINING MANAGER STARTED")
     print(f" Total Agents: {len(agents_list)}")
     print(f" Concurrent Jobs: {args.concurrency}")
     print(f"==================================================\n")
 
-    # Initialize the GUI Dashboard on the Main Thread
     dashboard = TrainingDashboard(len(agents_list))
 
-    # Kick off the training manager in a Background Thread
     bg_thread = threading.Thread(
         target=background_execution_thread,
         args=(args, agents_list, base_yaml_config, dashboard),
-        daemon=True  # Ensures the background thread dies if you close the GUI window
+        daemon=True
     )
     bg_thread.start()
 
-    # Hand control over to the Tkinter GUI Loop
     dashboard.root.mainloop()

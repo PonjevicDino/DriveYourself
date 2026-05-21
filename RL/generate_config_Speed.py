@@ -10,7 +10,6 @@ def generate_speed_agents(prefix, count):
     print(f"Generating {count} agents with prefix '{prefix}' focused only on Speed...")
 
     for i in range(count):
-        # Calculate evenly distributed speeds
         if count > 1:
             speed = int(round(min_speed + i * (max_speed - min_speed) / (count - 1)))
         else:
@@ -22,10 +21,8 @@ def generate_speed_agents(prefix, count):
         acc_str = "A10"
         smooth_str = "Sm0"
 
-        # ID example: Run007-Agent_01-S020
         agent_id = f"{prefix}-Agent_{num_str}-{speed_str}-{weight_str}-{acc_str}-{smooth_str}"
 
-        # We pass 0.0 for the other parameters since we are testing ONLY speed right now
         agent_data = {
             "id": agent_id,
             "speed": float(speed),

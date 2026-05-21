@@ -1,6 +1,4 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using TMPro;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
@@ -18,17 +16,18 @@ public class DriveYourselfAgent : Agent
     private float episodeSmoothnessPenalty;
     private float episodeDtCReward;
     private float episodeDtCDeviation;
-    private float effectiveRatio = 0.0f;
-    private float lastThrottleInput = 0.0f;
-    private float lastBrakeInput = 0.0f;
-    private float lastSteeringAction = 0.0f;
+    private long episodeStepCount;
+    private float effectiveRatio;
+    private float lastThrottleInput;
+    private float lastBrakeInput;
+    private float lastSteeringAction;
 
     private float smoothnessProgression = 1.0f;
     private float dtcProgression = 1.0f;
     
-    private float targetSteer = 0.0f;
-    private float targetThrottle = 0.0f;
-    private float targetBrake = 0.0f;
+    private float targetSteer;
+    private float targetThrottle;
+    private float targetBrake;
 
     [SerializeField] private int lookAheadSegments;
 
@@ -56,9 +55,9 @@ public class DriveYourselfAgent : Agent
     [SerializeField] private float minCurriculumTrainingSpeed = 40.0f;
     [SerializeField] private float steeringSpeed = 0.25f; // time from full lock to center
     [SerializeField] private float pedalSpeed = 0.25f;
-    private float currentSteeringAngle = 0.0f;
-    private float currentThrottle = 0.0f;
-    private float currentBrake = 0.0f;
+    private float currentSteeringAngle;
+    private float currentThrottle;
+    private float currentBrake;
 
     [Header("EndEpisodeConditions")]
     [SerializeField, Min(1)] private int endEpisodeAfterCompletedLaps = 1;
@@ -71,10 +70,10 @@ public class DriveYourselfAgent : Agent
     private Vector3 startingPositionForEpisode;
     private Quaternion startingRotation;
 
-    private float lastLapProgress = 0.0f;
-    private int lastLap = 0;
+    private float lastLapProgress;
+    private int lastLap;
 
-    [HideInInspector] public bool startedFirstLap = false;
+    [HideInInspector] public bool startedFirstLap;
 
     [SerializeField, Min(0.0f)] private float startingPositionSidewaysOffset;
     [SerializeField, Range(0.0f, 180.0f)] private float startingRotationForEpisode;
@@ -99,9 +98,9 @@ public class DriveYourselfAgent : Agent
     }
 
 
-    long fixedUpdateCounter = 0L;
-    double ingameSecondsSinceStartup = 0.0d;
-    private double timeAtLastSignificantMove = 0.0d;
+    long fixedUpdateCounter;
+    double ingameSecondsSinceStartup;
+    private double timeAtLastSignificantMove;
     void FixedUpdate()
     {
         fixedUpdateCounter++;
@@ -163,6 +162,7 @@ public class DriveYourselfAgent : Agent
         episodeSpeedDeviation = 0.0f;
         episodeDtCReward = 0.0f;
         episodeDtCDeviation = 0.0f;
+        episodeStepCount = 0L;
         episodeMaxAcceleration = 0.0f;
         episodeSmoothnessPenalty = 0.0f;
 
@@ -182,17 +182,17 @@ public class DriveYourselfAgent : Agent
             switch (startingAxis)
             {
                 case StartingAxis.X:
-                    startingPositionForEpisode += new Vector3(0.0f, 0.0f, UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset));
+                    startingPositionForEpisode += new Vector3(0.0f, 0.0f, Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset));
                     break;
                 case StartingAxis.Z:
-                    startingPositionForEpisode += new Vector3(UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset), 0.0f, 0.0f);
+                    startingPositionForEpisode += new Vector3(Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset), 0.0f, 0.0f);
                     break;
             }
             carController.transform.SetPositionAndRotation(startingPositionForEpisode, startingRotation);
-            carController.transform.Rotate(new Vector3(0.0f, UnityEngine.Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0.0f));
+            carController.transform.Rotate(new Vector3(0.0f, Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0.0f));
 
             carRb.angularVelocity = Vector3.zero;
-            carRb.linearVelocity = (carController.transform.forward * UnityEngine.Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) + (carController.transform.right * UnityEngine.Random.Range(-startingMaximumSidewaysSpeed / 3.6f, startingMaximumSidewaysSpeed / 3.6f));
+            carRb.linearVelocity = (carController.transform.forward * Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) + (carController.transform.right * Random.Range(-startingMaximumSidewaysSpeed / 3.6f, startingMaximumSidewaysSpeed / 3.6f));
         }
         carController.externalController = true;
 #if UNITY_EDITOR || UNITY_STANDALONE_WIN
@@ -255,6 +255,10 @@ public class DriveYourselfAgent : Agent
         sensor.AddObservation(vehicleData.GetSpeed() / 100f);
         sensor.AddObservation(Mathf.Clamp(vehicleData.GetAccelleration(), 0f, 20f) / 20f);
         sensor.AddObservation(Mathf.Clamp(vehicleData.GetDtC() / maxAllowedRewardDtc, -1f, 1f));
+        
+        Debug.Log("DTC: (old) " + vehicleData.ReturnLastDtC() + "m + - (new) " + vehicleData.GetContinuousDtC() + "m + - (diff) " + (vehicleData.ReturnLastDtC() - vehicleData.GetContinuousDtC() + "m"));
+        Debug.Log("LAP: (old) " + vehicleData.GetLap() + "m + - (new) " + vehicleData.GetContinuousLap() + "m");
+        Debug.Log("PRG: (old) " + vehicleData.GetProgress() + "% + - (new) " + vehicleData.GetContinuousProgress() + "%");
 
         sensor.AddObservation(carController.throttleInput);
         sensor.AddObservation(carController.brakeInput);
@@ -358,7 +362,7 @@ public class DriveYourselfAgent : Agent
         agentStrText.text = "Str: " + actions.ContinuousActions[1].ToString("F4");
         agentSpdText.text = "Spd: " + vehicleData.GetSpeed().ToString("F1") + " km/h";
         agentRpmText.text = "RPM: " + carController.engineRPM.ToString("F0") + " - G: " + carController.currentGear.ToString();
-        agentDtCText.text = "DtC: " + vehicleData.ReturnLastDtC() + " m";
+        agentDtCText.text = "DtC: " + vehicleData.GetContinuousDtC().ToString("F4") + " m";
 
         // Rewards
         //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
@@ -424,12 +428,12 @@ public class DriveYourselfAgent : Agent
                     float combinedMultiplier = speedScore * dtcMultiplier;
                     float finalReward = progressReward * combinedMultiplier;
                     
-                    bool isSpeeding = currentSpeed > targetSpeed + 5.0f;
-                    bool isCornerCutting = currentDtC > (currentEffectiveLimit + 1.0f);
-                    if (!isSpeeding && !isCornerCutting)
-                    {
-                        finalReward = Mathf.Max(progressReward * universalFloor, finalReward);
-                    }
+                    float speedViolation = Mathf.Clamp01((currentSpeed - (targetSpeed + 5.0f)) / 15.0f);
+                    float dtcViolation = Mathf.Clamp01((currentDtC - (currentEffectiveLimit + 1.0f)) / 2.0f);
+                    float deltaViolation = Mathf.Max(speedViolation, dtcViolation);
+                    float adaptiveFloor = Mathf.Lerp(universalFloor, 0.0f, deltaViolation);
+                    
+                    finalReward = Mathf.Max(progressReward * adaptiveFloor, finalReward);
                     AddReward(finalReward);
 
 
@@ -461,6 +465,7 @@ public class DriveYourselfAgent : Agent
 
                 // Logging
                 episodeProgressReward += finalReward;
+                episodeStepCount++;
                 
                 episodeSpeedPenalty += (1.0f - speedScore);
                 episodeDtCReward += dtcScore;
@@ -516,8 +521,9 @@ public class DriveYourselfAgent : Agent
         {
             return;
         }
-
-        long stepCount = fixedUpdateCounter > 0 ? fixedUpdateCounter : 1;
+        
+        long statsStepCount = episodeStepCount > 0 ? episodeStepCount : 1;
+        
         float lapsCompleted = 0f;
         //Debug.LogWarning("Completed Laps: " + lapsCompleted);
         if (startedFirstLap)
@@ -541,8 +547,8 @@ public class DriveYourselfAgent : Agent
         stats.Add("Custom/Total Progress Reward", episodeProgressReward, StatAggregationMethod.Average);
         stats.Add("Custom/Total Speed Penalty", episodeSpeedPenalty, StatAggregationMethod.Average);
         stats.Add("Custom/Total DtC Reward", episodeDtCReward, StatAggregationMethod.Average);
-        stats.Add("Custom/Avg Speed Deviation", episodeSpeedDeviation / stepCount, StatAggregationMethod.Average);
-        stats.Add("Custom/Avg DtC Deviation", episodeDtCDeviation / stepCount, StatAggregationMethod.Average);
+        stats.Add("Custom/Avg Speed Deviation", episodeSpeedDeviation / statsStepCount, StatAggregationMethod.Average);
+        stats.Add("Custom/Avg DtC Deviation", episodeDtCDeviation / statsStepCount, StatAggregationMethod.Average);
         stats.Add("Custom/Max Acceleration", episodeMaxAcceleration, StatAggregationMethod.Average);
         stats.Add("Custom/Total Smoothness Penalty", episodeSmoothnessPenalty, StatAggregationMethod.Average);
     }

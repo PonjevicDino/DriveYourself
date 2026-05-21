@@ -1847,7 +1847,6 @@ GameObject:
   - component: {fileID: 200363786}
   - component: {fileID: 200363787}
   - component: {fileID: 200363790}
-  - component: {fileID: 200363789}
   - component: {fileID: 200363791}
   - component: {fileID: 200363792}
   m_Layer: 8
@@ -1895,7 +1894,7 @@ MonoBehaviour:
     VectorActionDescriptions: []
     VectorActionSpaceType: 1
     hasUpgradedBrainParametersWithActionSpec: 1
-  m_Model: {fileID: 5022602860645237092, guid: 53261c32ee1f73f4ab46be2db17a1aeb, type: 3}
+  m_Model: {fileID: 5022602860645237092, guid: 788ea272f73297d4a9da2c2495f0d8e5, type: 3}
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: TestModel
@@ -1927,7 +1926,7 @@ MonoBehaviour:
   agentSpdText: {fileID: 1073547967}
   agentRpmText: {fileID: 868582843}
   agentDtCText: {fileID: 880381071}
-  targetSpeed: 64
+  targetSpeed: 60
   maxAllowedRewardDtc: 5
   DtCRewardPercent: 100
   accelTime0to100: 10
@@ -1937,7 +1936,7 @@ MonoBehaviour:
   pedalSpeed: 0.25
   endEpisodeAfterCompletedLaps: 3
   endEpisodeCarYPosition: -1
-  endEpisodeCarStuckSeconds: 15
+  endEpisodeCarStuckSeconds: 2147483647
   startedFirstLap: 0
   startingPositionSidewaysOffset: 5
   startingRotationForEpisode: 20
@@ -1956,21 +1955,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d43f052b66974b5478419697a4e886fb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!114 &200363789
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 200363779}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 29628d9f790694047b3caff3e8d11b8b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  roadSegments: []
-  autoAddRoadComponent: {fileID: 1129676852}
-  reachThreshold: 7.5
+  roadLayout: {fileID: 1129676853}
+  reachThreshold: 5
 --- !u!114 &200363790
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2015,12 +2001,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rootFolder: Assets/RL/Models
-  runPrefix: SpeedDtCTest
+  runPrefix: SpeedDtCTestShort
   targetSpeed: 63
   targetWeight: 100
   targetAccelTime: 20
   targetSmoothness: 10
-  currentLoadedModel: SpeedDtCTest-Agent_299-S064-W100-A10-Sm0.onnx
+  currentLoadedModel: SpeedDtCTestShort-Agent_015-S060-W100-A10-Sm0.onnx
   boActive: 0
   boStartCommandGiven: 0
 --- !u!1 &355382647
@@ -9934,6 +9920,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1129676852}
+  - component: {fileID: 1129676854}
+  - component: {fileID: 1129676853}
   m_Layer: 7
   m_Name: RoadCollectionParent
   m_TagString: Untagged
@@ -9995,6 +9983,60 @@ Transform:
   - {fileID: 888065549}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1129676853
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1129676851}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 29628d9f790694047b3caff3e8d11b8b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  roadSegments: []
+  trackSpline: {fileID: 0}
+--- !u!114 &1129676854
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1129676851}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dab5c7d4c32e743048dfca98e2d5914f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Spline:
+    m_EditModeType: 1
+    m_Knots: []
+    m_MetaData: []
+    m_Closed: 0
+    m_IntData:
+      m_Data: []
+    m_FloatData:
+      m_Data: []
+    m_Float4Data:
+      m_Data: []
+    m_ObjectData:
+      m_Data: []
+  m_Splines:
+  - m_EditModeType: 1
+    m_Knots: []
+    m_MetaData: []
+    m_Closed: 0
+    m_IntData:
+      m_Data: []
+    m_FloatData:
+      m_Data: []
+    m_Float4Data:
+      m_Data: []
+    m_ObjectData:
+      m_Data: []
+  m_Knots:
+    m_KnotsLink: []
 --- !u!1001 &1145060605
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -12581,7 +12623,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   mode: 1
-  size: {x: 194.63177, y: 3.100001, z: 268.87177}
+  size: {x: 194.6318, y: 3.100001, z: 268.8718}
   overrideRendererFilters: 0
   minRendererVolumeSize: 0.1
   objectLayerMask:
@@ -12621,7 +12663,7 @@ Transform:
   m_GameObject: {fileID: 1380958843}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 88.24, y: 0.050000504, z: 81.03999}
+  m_LocalPosition: {x: 88.24001, y: 0.050000504, z: 81.04001}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

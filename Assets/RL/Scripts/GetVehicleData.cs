@@ -1,37 +1,48 @@
-using Assets.Scripts.Components;
-using Assets.Scripts.QLearningModules;
 using System.Collections.Generic;
 using System.Linq;
-using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem.XR;
+using UnityEngine.Splines;
+using Unity.Mathematics;
 
 public class GetVehicleData : MonoBehaviour
 {
     private RCC_CarControllerV4 carController;
     private Rigidbody carRb;
     private GameObject roadSegment;
-    private RoadLayout roadLayout;
-
+    public RoadLayout roadLayout;
+    
+    [Tooltip("Distance threshold (in meters) to switch to next waypoint.")]
+    public float reachThreshold = 5f;
+    private int currentSegmentIndex = 0;
+    private int chunkLap = 1;
+    private Transform nextPoint;
     private float segmentProgress;
-    private int lap = 0;
-
-    // Calculation variables
+    
     private Vector3 lastVelocity;
     private Vector3 currentAccelerationVector;
     private float currentAccelerationMagnitude;
     private float currentJerk;
     private float lastAccelerationMag;
+    
+    private float currentContinuousProgressPercent;
+    private float currentContinuousDtC;
+    private int currentContinuousLap = 1;
+    private float lastT = 0f;
 
     void Start()
     {
         carController = this.transform.parent.GetComponent<RCC_CarControllerV4>();
         carRb = carController.GetComponent<Rigidbody>();
-        roadLayout = this.GetComponent<RoadLayout>();
 
-        if (carRb)
+        if (carRb) lastVelocity = carRb.linearVelocity;
+
+        if (roadLayout != null && roadLayout.roadSegments.Count > 0)
         {
-            lastVelocity = carRb.linearVelocity;
+            nextPoint = roadLayout.roadSegments[currentSegmentIndex].BeginPoint;
+        }
+        else
+        {
+            Debug.LogError($"{gameObject.name}: Missing Shared Road Layout!");
         }
     }
 
@@ -47,6 +58,123 @@ public class GetVehicleData : MonoBehaviour
         currentJerk = (currentAccelerationMagnitude - lastAccelerationMag) / Time.fixedDeltaTime;
         lastVelocity = currentVelocity;
         lastAccelerationMag = currentAccelerationMagnitude;
+        
+        EvaluateSplineData();
+    }
+    
+    public void CheckIfNextSegmentHasBeenReached()
+    {
+        if (roadLayout == null || nextPoint == null) return;
+
+        Vector2 carPos2D = new Vector2(carController.transform.position.x, carController.transform.position.z);
+        Vector2 targetPos2D = new Vector2(nextPoint.position.x, nextPoint.position.z);
+        float distance = Vector2.Distance(carPos2D, targetPos2D);
+
+        float threshHoldMult = Mathf.Clamp(carController.speed / 50f, 1f, 2f); 
+        float effectiveThreshold = reachThreshold * threshHoldMult;
+        
+        int nextNextIndex = (currentSegmentIndex + 1) % roadLayout.roadSegments.Count;
+        Vector2 nextNextPos2D = new Vector2(roadLayout.roadSegments[nextNextIndex].BeginPoint.position.x, roadLayout.roadSegments[nextNextIndex].BeginPoint.position.z);
+        float distanceToNextNext = Vector2.Distance(carPos2D, nextNextPos2D);
+        
+        if (distance < effectiveThreshold || distanceToNextNext < distance)
+        {
+            if (currentSegmentIndex == roadLayout.roadSegments.Count - 1)
+            {
+                chunkLap += 1;
+            }
+            currentSegmentIndex = (currentSegmentIndex + 1) % roadLayout.roadSegments.Count;
+            nextPoint = roadLayout.roadSegments[currentSegmentIndex].BeginPoint;
+        }
+    }
+
+    public GameObject GetRoadSegment()
+    {
+        CheckIfNextSegmentHasBeenReached();
+        int adaptedIndex = currentSegmentIndex - 1;
+        if (adaptedIndex < 0) adaptedIndex = roadLayout.roadSegments.Count - 1;
+        roadSegment = roadLayout.roadSegments[adaptedIndex].gameObject;
+        return roadSegment; 
+    }
+
+    public GameObject GetNextRoadSegment(GameObject roadSegment)
+    {
+        return roadSegment.transform.GetSiblingIndex() + 1 < roadSegment.transform.parent.childCount ? roadSegment.transform.parent.GetChild(roadSegment.transform.GetSiblingIndex() + 1).gameObject : roadSegment.transform.parent.GetChild(0).gameObject;
+    }
+
+    public void ResetVars()
+    {
+        if (carRb) lastVelocity = carRb.linearVelocity;
+        currentAccelerationVector = Vector3.zero;
+        currentAccelerationMagnitude = 0f;
+        lastAccelerationMag = 0f;
+        
+        currentSegmentIndex = 0;
+        chunkLap = 1;
+        if (roadLayout != null && roadLayout.roadSegments.Count > 0)
+        {
+            nextPoint = roadLayout.roadSegments[currentSegmentIndex].BeginPoint;
+            roadSegment = roadLayout.roadSegments[0].gameObject;
+        }
+        
+        currentContinuousLap = 1;
+        lastT = 0f;
+        currentContinuousProgressPercent = 0f;
+    }
+
+    public float GetProgress()
+    {
+        if (roadLayout == null || roadSegment == null) return 0f;
+        float roadSegmentPercent = (float) roadSegment.transform.GetSiblingIndex() / (float) roadLayout.roadSegments.Count * 100.0f;
+        float accurateSegmentPercent = 1.0f / (float) roadLayout.roadSegments.Count * segmentProgress / 10.0f * 100.0f;
+        return Mathf.Clamp(roadSegmentPercent + accurateSegmentPercent, 0.0f, 100.0f);
+    }
+
+    public int GetLap() => chunkLap;
+    
+    private void EvaluateSplineData()
+    {
+        if (!roadLayout || roadLayout.trackSpline == null) return;
+        
+        Spline spline = roadLayout.trackSpline.Spline;
+        if (spline == null || spline.Count == 0) return;
+
+        Vector3 carWorldPos = carController.transform.position;
+        float3 carLocalPos = roadLayout.trackSpline.transform.InverseTransformPoint(carWorldPos);
+
+        SplineUtility.GetNearestPoint(spline, carLocalPos, out float3 nearestLocalPos, out float t);
+
+        if (lastT > 0.8f && t < 0.2f) currentContinuousLap++;
+        else if (lastT < 0.2f && t > 0.8f) currentContinuousLap--; 
+        
+        lastT = t;
+        currentContinuousProgressPercent = t * 100.0f;
+
+        float3 trackForwardLocal = SplineUtility.EvaluateTangent(spline, t);
+        Vector3 trackForwardWorld = roadLayout.trackSpline.transform.TransformDirection(trackForwardLocal);
+    
+        Vector3 nearestWorldPos = roadLayout.trackSpline.transform.TransformPoint(nearestLocalPos);
+        Vector3 flatCarPos = new Vector3(carWorldPos.x, 0f, carWorldPos.z);
+        Vector3 flatNearestPos = new Vector3(nearestWorldPos.x, 0f, nearestWorldPos.z);
+        Vector3 flatTrackToCar = flatCarPos - flatNearestPos;
+        
+        float distance = flatTrackToCar.magnitude;
+        Vector3 flatTrackForward = new Vector3(trackForwardWorld.x, 0f, trackForwardWorld.z).normalized;
+        float side = Mathf.Sign(Vector3.Dot(Vector3.Cross(Vector3.up, flatTrackForward), flatTrackToCar));
+    
+        currentContinuousDtC = distance * side;
+    }
+    
+    public float GetContinuousDtC() => currentContinuousDtC;
+    public float GetContinuousProgress() => currentContinuousProgressPercent;
+    public int GetContinuousLap() => currentContinuousLap;
+    
+    public Vector3 GetContinuousForwardVector() 
+    {
+        if (!roadLayout || !roadLayout.trackSpline) return Vector3.forward;
+        Spline spline = roadLayout.trackSpline.Spline;
+        float3 trackForwardLocal = SplineUtility.EvaluateTangent(spline, lastT);
+        return roadLayout.trackSpline.transform.TransformDirection(trackForwardLocal).normalized;
     }
 
     public float GetSpeed()
@@ -58,20 +186,9 @@ public class GetVehicleData : MonoBehaviour
         return carController.speed;
     }
 
-    public float GetAccelleration()
-    {
-        return currentAccelerationMagnitude;
-    }
-
-    public Vector3 GetAccellerationVector()
-    {
-        return currentAccelerationVector;
-    }
-
-    public float GetJerk()
-    {
-        return currentJerk;
-    }
+    public float GetAccelleration() => currentAccelerationMagnitude;
+    public Vector3 GetAccellerationVector() => currentAccelerationVector;
+    public float GetJerk() => currentJerk;
 
     private float lastDtc = 0.0f;
     public float GetDtC()
@@ -154,50 +271,6 @@ public class GetVehicleData : MonoBehaviour
 
         return dtc;
     }
-    public float ReturnLastDtC()
-    {
-        return lastDtc;
-    }
 
-    public GameObject GetRoadSegment()
-    {
-        roadLayout.CheckIfNextSegmentHasBeenReached();
-        roadSegment = roadLayout.roadSegments[roadLayout.GetCurrentSegmentIndex()].gameObject;
-        lap = roadLayout.GetCurrentLap();
-        return roadSegment; 
-    }
-
-    public GameObject GetNextRoadSegment(GameObject roadSegment)
-    {
-        return roadSegment.transform.GetSiblingIndex() + 1 < roadSegment.transform.parent.childCount ? roadSegment.transform.parent.GetChild(roadSegment.transform.GetSiblingIndex() + 1).gameObject : roadSegment.transform.parent.GetChild(0).gameObject; ;
-    }
-
-    public void ResetVars()
-    {
-        if (!roadLayout)
-        {
-            return;
-        }
-        roadLayout.ResetProgress();
-        roadSegment = roadLayout.roadSegments[0].gameObject;
-
-        if (carRb) lastVelocity = carRb.linearVelocity;
-        currentAccelerationVector = Vector3.zero;
-        currentAccelerationMagnitude = 0f;
-        lastAccelerationMag = 0f;
-
-        lap = 1;
-    }
-
-    public float GetProgress()
-    {
-        float roadSegmentPercent = (float) roadSegment.transform.GetSiblingIndex() / (float) roadLayout.roadSegments.Count() * 100.0f;
-        float accurateSegmentPercent = 1.0f / (float) roadLayout.roadSegments.Count() * segmentProgress / 10.0f * 100.0f;
-        return Mathf.Clamp(roadSegmentPercent + accurateSegmentPercent, 0.0f, 100.0f);
-    }
-
-    public int GetLap()
-    {
-        return lap;
-    }
+    public float ReturnLastDtC() => lastDtc;
 }

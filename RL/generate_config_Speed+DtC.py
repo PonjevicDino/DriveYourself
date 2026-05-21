@@ -12,7 +12,6 @@ def generate_matrix_agents(prefix, count):
     min_dtc = 0
     max_dtc = 100
 
-    # Calculate grid dimensions (assuming a square matrix, e.g., 25 agents = 5x5 grid)
     grid_size = int(math.isqrt(count))
 
     if grid_size * grid_size != count:
@@ -24,14 +23,12 @@ def generate_matrix_agents(prefix, count):
     agent_index = 1
 
     for i in range(grid_size):
-        # Calculate evenly distributed speed for this row
         if grid_size > 1:
             speed = int(round(min_speed + i * (max_speed - min_speed) / (grid_size - 1)))
         else:
             speed = max_speed
 
         for j in range(grid_size):
-            # Calculate evenly distributed DtC for this column
             if grid_size > 1:
                 dtc = int(round(min_dtc + j * (max_dtc - min_dtc) / (grid_size - 1)))
             else:
@@ -43,10 +40,8 @@ def generate_matrix_agents(prefix, count):
             acc_str = "A10"
             smooth_str = "Sm0"
 
-            # ID example: Run008-Agent_01-S020-W0-A10-Sm0
             agent_id = f"{prefix}-Agent_{num_str}-{speed_str}-{weight_str}-{acc_str}-{smooth_str}"
 
-            # Normalize dtc_weight from 0-100 to 0.0-1.0 for Unity's EnvironmentParameters
             agent_data = {
                 "id": agent_id,
                 "speed": float(speed),
