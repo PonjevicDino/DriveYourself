@@ -1,9 +1,11 @@
 using System.Collections;
 using TMPro;
+using Unity.Mathematics;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
 using UnityEngine;
+using UnityEngine.Splines;
 
 public class DriveYourselfAgent : Agent
 {
@@ -29,7 +31,7 @@ public class DriveYourselfAgent : Agent
     private float targetThrottle;
     private float targetBrake;
 
-    [SerializeField] private int lookAheadSegments;
+    [SerializeField] public int lookAheadSegments;
 
     [SerializeField] private TextMeshProUGUI agentAccText;
     [SerializeField] private TextMeshProUGUI agentBrkText;
@@ -66,20 +68,15 @@ public class DriveYourselfAgent : Agent
 
     private GetVehicleData vehicleData;
     private Rigidbody carRb;
-    private Vector3 startingPosition;
-    private Vector3 startingPositionForEpisode;
-    private Quaternion startingRotation;
 
     private float lastLapProgress;
     private int lastLap;
-
-    [HideInInspector] public bool startedFirstLap;
-
+    
+    private Vector3 startingPositionForEpisode;
     [SerializeField, Min(0.0f)] private float startingPositionSidewaysOffset;
     [SerializeField, Range(0.0f, 180.0f)] private float startingRotationForEpisode;
     [SerializeField, Min(0.0f)] private float startingMaximumForwardSpeed;
     [SerializeField, Min(0.0f)] private float startingMaximumSidewaysSpeed;
-    [SerializeField] private StartingAxis startingAxis;
     private enum StartingAxis
     {
         X,
@@ -89,12 +86,14 @@ public class DriveYourselfAgent : Agent
     void Start()
     {
         carController = this.transform.parent.GetComponent<RCC_CarControllerV4>();
-
-        startingPosition = startingPositionForEpisode = carController.transform.position;
-        startingRotation = carController.transform.rotation;
+        
         carRb = carController.GetComponent<Rigidbody>();
         vehicleData = this.GetComponent<GetVehicleData>();
         carController.canGoReverseNow = false;
+        
+#if UNITY_EDITOR
+        GlobalSettings.showDebugRays = true;
+#endif
     }
 
 
@@ -109,8 +108,7 @@ public class DriveYourselfAgent : Agent
         currentThrottle = Mathf.MoveTowards(currentThrottle, targetThrottle, (1.0f / pedalSpeed) * Time.fixedDeltaTime);
         currentBrake = Mathf.MoveTowards(currentBrake, targetBrake, (1.0f / pedalSpeed) * Time.fixedDeltaTime);
         currentSteeringAngle = Mathf.MoveTowards(currentSteeringAngle, targetSteer, (1.0f / steeringSpeed) * Time.fixedDeltaTime);
-
-        // Apply it to the physical car
+        
         if (!carRb.isKinematic)
         {
             carController.throttleInput = currentThrottle;
@@ -178,22 +176,29 @@ public class DriveYourselfAgent : Agent
 
         if (!this.GetComponent<AgentSelector>().boActive || this.GetComponent<AgentSelector>().boStartCommandGiven)
         {
-            startingPositionForEpisode = startingPosition;
-            switch (startingAxis)
-            {
-                case StartingAxis.X:
-                    startingPositionForEpisode += new Vector3(0.0f, 0.0f, Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset));
-                    break;
-                case StartingAxis.Z:
-                    startingPositionForEpisode += new Vector3(Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset), 0.0f, 0.0f);
-                    break;
-            }
-            carController.transform.SetPositionAndRotation(startingPositionForEpisode, startingRotation);
-            carController.transform.Rotate(new Vector3(0.0f, Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0.0f));
+            Spline spline = vehicleData.roadLayout.trackSpline.Spline;
+            float randomT = UnityEngine.Random.Range(0f, 1f);
+            
+            float3 localPos = SplineUtility.EvaluatePosition(spline, randomT);
+            float3 localTangent = SplineUtility.EvaluateTangent(spline, randomT);
+
+            Transform trackTransform = vehicleData.roadLayout.trackSpline.transform;
+            Vector3 worldPos = trackTransform.TransformPoint(localPos);
+            Vector3 worldForward = trackTransform.TransformDirection(localTangent).normalized;
+            Vector3 worldRight = Vector3.Cross(Vector3.up, worldForward).normalized;
+            
+            worldPos += worldRight * UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset);
+            worldPos += Vector3.up * 1.0f;
+            
+            Quaternion rotation = Quaternion.LookRotation(worldForward, Vector3.up);
+            rotation *= Quaternion.Euler(0, UnityEngine.Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0);
+
+            carController.transform.SetPositionAndRotation(worldPos, rotation);
 
             carRb.angularVelocity = Vector3.zero;
-            carRb.linearVelocity = (carController.transform.forward * Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) + (carController.transform.right * Random.Range(-startingMaximumSidewaysSpeed / 3.6f, startingMaximumSidewaysSpeed / 3.6f));
+            carRb.linearVelocity = (carController.transform.forward * UnityEngine.Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) + (carController.transform.right * UnityEngine.Random.Range(-startingMaximumSidewaysSpeed / 3.6f, startingMaximumSidewaysSpeed / 3.6f));
         }
+        
         carController.externalController = true;
 #if UNITY_EDITOR || UNITY_STANDALONE_WIN
         if (!Application.isBatchMode)
@@ -212,15 +217,15 @@ public class DriveYourselfAgent : Agent
         //carController.engineRunning = false; 
         //carController.engineRPMRaw = 0;
 
-        lastLap = 0;
+        lastLap = 1;
         lastLapProgress = 0.0f;
-
-        startedFirstLap = false;
 
         fixedUpdateCounter = 0L;
         timeAtLastSignificantMove = 0.0d;
 
         //StartCoroutine(UnfreezeMovement());
+        vehicleData.SyncDiscreteSegmentToSpline();
+        vehicleData.InitContinuousSplineState();
     }
 
     private IEnumerator UnfreezeMovement()
@@ -254,11 +259,7 @@ public class DriveYourselfAgent : Agent
 
         sensor.AddObservation(vehicleData.GetSpeed() / 100f);
         sensor.AddObservation(Mathf.Clamp(vehicleData.GetAccelleration(), 0f, 20f) / 20f);
-        sensor.AddObservation(Mathf.Clamp(vehicleData.GetDtC() / maxAllowedRewardDtc, -1f, 1f));
-        
-        Debug.Log("DTC: (old) " + vehicleData.ReturnLastDtC() + "m + - (new) " + vehicleData.GetContinuousDtC() + "m + - (diff) " + (vehicleData.ReturnLastDtC() - vehicleData.GetContinuousDtC() + "m"));
-        Debug.Log("LAP: (old) " + vehicleData.GetLap() + "m + - (new) " + vehicleData.GetContinuousLap() + "m");
-        Debug.Log("PRG: (old) " + vehicleData.GetProgress() + "% + - (new) " + vehicleData.GetContinuousProgress() + "%");
+        sensor.AddObservation(Mathf.Clamp(vehicleData.GetContinuousDtC() / maxAllowedRewardDtc, -1f, 1f));
 
         sensor.AddObservation(carController.throttleInput);
         sensor.AddObservation(carController.brakeInput);
@@ -269,39 +270,45 @@ public class DriveYourselfAgent : Agent
         sensor.AddObservation(localVelocity.x / 10.0f);
         sensor.AddObservation(localVelocity.z / 27.7f); // 27,7 m/s = 100 km/h
 
-        GameObject currentSegment = vehicleData.GetRoadSegment();
-        switch (currentSegment.name.Split("_")[1])
+        // GameObject currentSegment = vehicleData.GetRoadSegment();
+        // switch (currentSegment.name.Split("_")[1])
+        // {
+        //     case "Left":
+        //         sensor.AddObservation(-1);
+        //         break;
+        //     case "Right":
+        //         sensor.AddObservation(1);
+        //         break;
+        //     default:
+        //         sensor.AddObservation(0);
+        //         break;
+        // }
+
+        float currentT = vehicleData.GetCurrentSplineT();
+        Spline spline = vehicleData.roadLayout.trackSpline.Spline;
+
+        Vector3 carPos = carController.transform.position;
+        Vector3 carForward = carController.transform.forward;
+
+        for (int i = 1; i <= lookAheadSegments; i++)
         {
-            case "Left":
-                sensor.AddObservation(-1);
-                break;
-            case "Right":
-                sensor.AddObservation(1);
-                break;
-            default:
-                sensor.AddObservation(0);
-                break;
-        }
-        
-        for (int segment = 0; segment < lookAheadSegments; segment++)
-        {
-            currentSegment = vehicleData.GetNextRoadSegment(currentSegment);
-            Vector3 relativePos = carController.transform.InverseTransformPoint(currentSegment.transform.position);
+            float lookAheadT = (currentT + (i * 0.02f)) % 1.0f;
+
+            float3 localPos = SplineUtility.EvaluatePosition(spline, lookAheadT);
+            Vector3 worldPos = vehicleData.roadLayout.trackSpline.transform.TransformPoint(localPos);
+            
+            Vector3 relativePos = carController.transform.InverseTransformPoint(worldPos);
             sensor.AddObservation(new Vector2(relativePos.x / 100.0f, relativePos.z / 100.0f));
-#if UNITY_EDITOR
-            Debug.DrawLine(carController.transform.position, currentSegment.transform.position, Color.yellow);
-#endif
+            
+            Vector3 toTarget = (worldPos - carPos).normalized;
+            float angleToTarget = Vector3.SignedAngle(carForward, toTarget, Vector3.up);
+            sensor.AddObservation(angleToTarget / 180.0f);
+
+            if (GlobalSettings.showDebugRays)
+            {
+                Debug.DrawLine(carPos, worldPos, Color.yellow);
+            }
         }
-
-        Transform nextRoadSegment = vehicleData.GetNextRoadSegment(vehicleData.GetRoadSegment()).transform;
-        Vector3 toNextRoadSegment = (nextRoadSegment.position - carController.transform.position).normalized;
-        float angleToNextRoadSegment = Vector3.SignedAngle(carController.transform.forward, toNextRoadSegment, Vector3.up);
-
-        Vector2 carPos2D = new Vector2(carController.transform.position.x, carController.transform.position.z);
-        Vector2 roadSegmentPos2D = new Vector2(nextRoadSegment.position.x, nextRoadSegment.position.z);
-        
-        sensor.AddObservation((carPos2D - roadSegmentPos2D).normalized);
-        sensor.AddObservation(angleToNextRoadSegment / 180.0f);
     }
 
     public override void OnActionReceived(ActionBuffers actions)
@@ -346,7 +353,7 @@ public class DriveYourselfAgent : Agent
         targetSteer = actions.ContinuousActions[1];
 
         // Time penalty
-        AddReward(-0.01f);
+        //AddReward(-0.01f);
 
         // Engine Inertia
         /*
@@ -359,139 +366,144 @@ public class DriveYourselfAgent : Agent
         // Input Text
         agentAccText.text = "Acc: " + currentThrottle.ToString("F4");
         agentBrkText.text = "Brk: " + currentBrake.ToString("F4");
-        agentStrText.text = "Str: " + actions.ContinuousActions[1].ToString("F4");
+        agentStrText.text = "Str: " + targetSteer.ToString("F4");
         agentSpdText.text = "Spd: " + vehicleData.GetSpeed().ToString("F1") + " km/h";
-        agentRpmText.text = "RPM: " + carController.engineRPM.ToString("F0") + " - G: " + carController.currentGear.ToString();
+        agentRpmText.text = "RPM: " + carController.engineRPM.ToString("F0") + " - G: " + carController.currentGear;
         agentDtCText.text = "DtC: " + vehicleData.GetContinuousDtC().ToString("F4") + " m";
 
         // Rewards
         //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
-        float currentProgress = vehicleData.GetProgress();
-        float deltaProgress = 0.0f;
+        
+        float currentContinuousProgress = vehicleData.GetContinuousProgress();
+        float currentDtC = Mathf.Abs(vehicleData.GetContinuousDtC());
+        int currentLap = vehicleData.GetContinuousLap();
+        
+        Vector3 trackForward = vehicleData.GetContinuousForwardVector();
+        Vector3 carVelocity = carRb.linearVelocity;
+            
+        // Progress (Always rewarded)
+        //float normalization = 100.0f / Mathf.Max(targetSpeed, 10.0f);
+        float velocityAlongPath = Vector3.Dot(carVelocity, trackForward);
+        float targetSpeedMs = targetSpeed / 3.6f;
+        float baseAlignmentReward = Mathf.Clamp(velocityAlongPath / targetSpeedMs, -1.0f, 1.0f);
 
-        if (startedFirstLap)
+        if (velocityAlongPath > 1.0f) 
         {
-            if (lastLap == 0) lastLap = vehicleData.GetLap();
-            if (vehicleData.GetLap() > lastLap && currentProgress < 50.0f)
-            {
-                deltaProgress = (100.0f - lastLapProgress) + currentProgress;
-                lastLap = vehicleData.GetLap();
-                lastLapProgress = currentProgress;
+            timeAtLastSignificantMove = ingameSecondsSinceStartup;
+        }
+
+            
+        // Speed
+        float speedScore;
+        float currentSpeed = vehicleData.GetSpeed();
+
+        if (currentSpeed <= targetSpeed)
+        {
+            speedScore = Mathf.Clamp01(currentSpeed / Mathf.Max(targetSpeed, 1.0f)); 
+        }
+        else
+        {
+            float overSpeedPenalty = Mathf.Clamp01((currentSpeed - targetSpeed) / 10.0f);
+            speedScore = 1.0f - overSpeedPenalty;
+        }
+
+            // Reward only for Progress + Speed
+            // float finalReward = progressReward * speedScore;
+            // finalReward= Mathf.Max(progressReward * 0.10f, finalRewardSpeed);
+            // AddReward(finalReward);
+                
+                
+        // DtC
+        float weightRatio = DtCRewardPercent / 100.0f;
+    
+        float dtcTargetLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, weightRatio);
+        float currentEffectiveLimit = Mathf.Lerp(maxAllowedRewardDtc, dtcTargetLimit, dtcProgression);
+
+        float normalizedDtC = Mathf.Clamp01(currentDtC / currentEffectiveLimit);
+        float curvePower = 4.0f; 
+        float dtcScore = 1.0f - Mathf.Pow(normalizedDtC, curvePower);
+        
+            // Reward for Progress + Speed + DtC
+            // float universalFloor = 0.40f;
+            // float dtcMultiplier = Mathf.Lerp(universalFloor, 1.0f, dtcScore);
+            // float combinedMultiplier = speedScore * dtcMultiplier;
+            // float stepReward = 0f;
+            // if (baseAlignmentReward > 0f) {
+            //     stepReward = baseAlignmentReward * combinedMultiplier * 0.02f;
+            // } else {
+            //     stepReward = baseAlignmentReward * 0.02f; 
+            // }
+            // AddReward(stepReward);
+
+            
+        // Smoothness
+        float deltaInput = Mathf.Abs(targetThrottle - lastThrottleInput) + Mathf.Abs(targetBrake - lastBrakeInput);
+        float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction);
+        float totalTwitch = deltaInput + deltaSteer;
+        float effectiveThreshold = Mathf.Lerp(2.0f, inputSmoothnessThreshold, smoothnessProgression);
+        float smoothMultiplier = CalculateCliffReward(totalTwitch, effectiveThreshold, 0.1f);
+        
+            // Reward for Progress + Speed + DtC + Smoothness
+            float universalFloor = 0.40f;
+            float dtcMultiplier = Mathf.Lerp(universalFloor, 1.0f, dtcScore);
+            float combinedMultiplier = speedScore * dtcMultiplier * smoothMultiplier;
+            float stepReward = 0f;
+            if (baseAlignmentReward > 0f) {
+                stepReward = baseAlignmentReward * combinedMultiplier * 0.02f;
+            } else {
+                stepReward = baseAlignmentReward * 0.02f; 
             }
-            else if (currentProgress > lastLapProgress)
+            AddReward(stepReward);
+            
+            
+        // Acceleration
+        Vector3 accelVec = vehicleData.GetAccellerationVector();
+        float longitudinalAccel = Mathf.Abs(accelVec.z);
+        float engineLimit = (100.0f / 3.6f) / Mathf.Max(accelTime0to100, 1.0f) * 2.5f;
+        float accMultiplier = CalculateCliffReward(longitudinalAccel, engineLimit, 2.0f);
+
+        if (longitudinalAccel > episodeMaxAcceleration)
+        {
+            episodeMaxAcceleration = longitudinalAccel;
+        }
+
+
+        // Final
+        //float combinedMultiplier = speedPenaltyMultiplier * dtcMultiplier * accMultiplier * smoothMultiplier;
+        //float finalReward = deltaProgress * normalization * combinedMultiplier;
+        //AddReward(finalReward);
+
+
+        // Logging
+        episodeProgressReward += stepReward;
+        episodeStepCount++;
+        
+        episodeSpeedPenalty += (1.0f - speedScore);
+        episodeDtCReward += dtcScore;
+        episodeSpeedDeviation += Mathf.Abs(currentSpeed - targetSpeed);
+        episodeDtCDeviation += currentDtC;
+        episodeSmoothnessPenalty += (1.0f - smoothMultiplier);
+
+        lastThrottleInput = targetThrottle;
+        lastBrakeInput = targetBrake;
+        lastSteeringAction = targetSteer;
+        
+        lastLapProgress = currentContinuousProgress;
+        lastLap = currentLap;
+
+        if (lastLap > endEpisodeAfterCompletedLaps)
+        {
+            AddReward(10.0f);
+            InjectStats();
+            if (this.GetComponent<AgentSelector>().boActive)
             {
-                deltaProgress = currentProgress - lastLapProgress;
-                lastLapProgress = currentProgress;
+                this.GetComponent<AgentSelector>().IterationEnd();
             }
-
-            if (lastLap > 0 && deltaProgress > 0.001f)
+            else
             {
-                timeAtLastSignificantMove = ingameSecondsSinceStartup;
-                
-                // Progress (Always rewarded)
-                //float normalization = 100.0f / Mathf.Max(targetSpeed, 10.0f);
-                float progressReward = deltaProgress;
-
-                
-                // Speed
-                float speedScore = 0.0f;
-                float currentSpeed = vehicleData.GetSpeed();
-
-                if (currentSpeed <= targetSpeed)
-                {
-                    speedScore = Mathf.Clamp01(currentSpeed / Mathf.Max(targetSpeed, 1.0f)); 
-                }
-                else
-                {
-                    float overSpeedPenalty = Mathf.Clamp01((currentSpeed - targetSpeed) / 20.0f);
-                    speedScore = 1.0f - overSpeedPenalty;
-                }
-
-                    // Reward only for Progress + Speed
-                    // float finalReward = progressReward * speedScore;
-                    // finalReward= Mathf.Max(progressReward * 0.10f, finalRewardSpeed);
-                    // AddReward(finalReward);
-                    
-                    
-                // DtC
-                float currentDtC = Mathf.Abs(vehicleData.ReturnLastDtC());
-                float weightRatio = DtCRewardPercent / 100.0f;
-                
-                float dtcTargetLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, weightRatio);
-                float currentEffectiveLimit = Mathf.Lerp(maxAllowedRewardDtc, dtcTargetLimit, dtcProgression);
-
-                float dtcScore = Mathf.Clamp01(1.0f - (currentDtC / currentEffectiveLimit));
-                
-                    // Reward for Progress + Speed + DtC
-                    float universalFloor = 0.40f;
-                    float dtcMultiplier = Mathf.Lerp(universalFloor, 1.0f, dtcScore);
-                    float combinedMultiplier = speedScore * dtcMultiplier;
-                    float finalReward = progressReward * combinedMultiplier;
-                    
-                    float speedViolation = Mathf.Clamp01((currentSpeed - (targetSpeed + 5.0f)) / 15.0f);
-                    float dtcViolation = Mathf.Clamp01((currentDtC - (currentEffectiveLimit + 1.0f)) / 2.0f);
-                    float deltaViolation = Mathf.Max(speedViolation, dtcViolation);
-                    float adaptiveFloor = Mathf.Lerp(universalFloor, 0.0f, deltaViolation);
-                    
-                    finalReward = Mathf.Max(progressReward * adaptiveFloor, finalReward);
-                    AddReward(finalReward);
-
-
-                // Acceleration
-                Vector3 accelVec = vehicleData.GetAccellerationVector();
-                float longitudinalAccel = Mathf.Abs(accelVec.z);
-                float engineLimit = (100.0f / 3.6f) / Mathf.Max(accelTime0to100, 1.0f) * 2.5f;
-                float accMultiplier = CalculateCliffReward(longitudinalAccel, engineLimit, 2.0f);
-
-                if (longitudinalAccel > episodeMaxAcceleration)
-                {
-                    episodeMaxAcceleration = longitudinalAccel;
-                }
-
-
-                // Smoothness
-                float deltaInput = Mathf.Abs(currentThrottle - lastThrottleInput) + Mathf.Abs(currentBrake - lastBrakeInput);
-                float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction);
-                float totalTwitch = deltaInput + deltaSteer;
-                float effectiveThreshold = Mathf.Lerp(2.0f, inputSmoothnessThreshold, smoothnessProgression);
-                float smoothMultiplier = CalculateCliffReward(totalTwitch, effectiveThreshold, 0.1f);
-
-
-                // Final
-                //float combinedMultiplier = speedPenaltyMultiplier * dtcMultiplier * accMultiplier * smoothMultiplier;
-                //float finalReward = deltaProgress * normalization * combinedMultiplier;
-                //AddReward(finalReward);
-
-
-                // Logging
-                episodeProgressReward += finalReward;
-                episodeStepCount++;
-                
-                episodeSpeedPenalty += (1.0f - speedScore);
-                episodeDtCReward += dtcScore;
-                episodeSpeedDeviation += Mathf.Abs(currentSpeed - targetSpeed);
-                episodeDtCDeviation += currentDtC;
-                episodeSmoothnessPenalty += (1.0f - smoothMultiplier);
-
-                lastThrottleInput = currentThrottle;
-                lastBrakeInput = currentBrake;
-                lastSteeringAction = targetSteer;
-
-                if (lastLap > endEpisodeAfterCompletedLaps && currentProgress > 33.33f && currentProgress < 80.0f)
-                {
-                    AddReward(10.0f);
-                    InjectStats();
-                    if (this.GetComponent<AgentSelector>().boActive)
-                    {
-                        this.GetComponent<AgentSelector>().IterationEnd();
-                    }
-                    else
-                    {
-                        Academy.Instance.StatsRecorder.Add("Custom/Episodes_Completed", 1.0f, StatAggregationMethod.Sum);
-                        EndEpisode();
-                        return;
-                    }
-                }
+                Academy.Instance.StatsRecorder.Add("Custom/Episodes_Completed", 1.0f, StatAggregationMethod.Sum);
+                EndEpisode();
+                return;
             }
         }
         if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
@@ -524,21 +536,8 @@ public class DriveYourselfAgent : Agent
         
         long statsStepCount = episodeStepCount > 0 ? episodeStepCount : 1;
         
-        float lapsCompleted = 0f;
-        //Debug.LogWarning("Completed Laps: " + lapsCompleted);
-        if (startedFirstLap)
-        {
-            if (ingameSecondsSinceStartup < 10.0d)
-            {
-                lapsCompleted = lastLapProgress / 100f;
-            }
-            else
-            {
-                int safeLap = lastLap > 0 ? lastLap : 1;
-                lapsCompleted = (safeLap - 1) + (lastLapProgress / 100f);
-            }
-        }
-
+        float lapsCompleted = lastLapProgress / 100.0f;
+        
         var stats = Academy.Instance.StatsRecorder;
         //Debug.Log("Total Reward: " + episodeProgressReward);
 

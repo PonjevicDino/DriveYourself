@@ -108,47 +108,30 @@ public class AgentSelector : MonoBehaviour
 
     public void FindAndAssignModel()
     {
-#if UNITY_EDITOR
         if (behaviorParameters == null) return;
+        string resourcesPath = "Models/" + runPrefix; 
+        ModelAsset[] availableModels = Resources.LoadAll<ModelAsset>(resourcesPath);
 
-        string assetFolderPath = Path.Combine(rootFolder, runPrefix);
-
-        string systemPath = "";
-
-        if (rootFolder.StartsWith("Assets"))
+        if (availableModels.Length == 0)
         {
-            systemPath = Path.Combine(Application.dataPath, rootFolder.Substring(7), runPrefix);
-        }
-        else
-        {
-            Debug.LogError($"[ModelSelector] Root folder must start with 'Assets/' (Current: {rootFolder})");
-            return;
-        }
-        if (!Directory.Exists(systemPath))
-        {
-            Debug.LogWarning($"[ModelSelector] Folder not found: {systemPath}. Keeping previous model.");
+            Debug.LogWarning($"[ModelSelector] No models found in Resources path: {resourcesPath}. Keeping previous model.");
             return;
         }
 
-        string[] files = Directory.GetFiles(systemPath, "*.onnx");
-        if (files.Length == 0) return;
-
-        string pattern = @"Agent_(\d+)-S(\d+)-W(\d+)-A(\d+)-Sm(\d+)\.onnx$";
+        string pattern = @"Agent_(\d+)-S(\d+)-W(\d+)-A(\d+)-Sm(\d+)";
         Regex regex = new Regex(pattern);
 
-        string bestFilePath = "";
+        ModelAsset bestModel = null;
         float minDistance = float.MaxValue;
-        string bestFileName = "";
         
         int bestFileSpeed = 0;
         int bestFileWeight = 0;
         int bestFileAcc = 0;
         int bestFileSmooth = 0;
 
-        foreach (string file in files)
+        foreach (ModelAsset model in availableModels)
         {
-            string fileName = Path.GetFileName(file);
-            Match match = regex.Match(fileName);
+            Match match = regex.Match(model.name);
 
             if (match.Success)
             {
@@ -167,8 +150,7 @@ public class AgentSelector : MonoBehaviour
                 if (dist < minDistance)
                 {
                     minDistance = dist;
-                    bestFilePath = file;
-                    bestFileName = fileName;
+                    bestModel = model;
                     
                     bestFileSpeed = fileSpeed;
                     bestFileWeight = fileWeight;
@@ -178,29 +160,15 @@ public class AgentSelector : MonoBehaviour
             }
         }
 
-        if (!string.IsNullOrEmpty(bestFilePath))
+        if (bestModel != null)
         {
-            if (currentLoadedModel == bestFileName && behaviorParameters.Model != null) return;
+            if (currentLoadedModel == bestModel.name && behaviorParameters.Model != null) return;
 
-            string relativePath = "Assets" + bestFilePath.Substring(Application.dataPath.Length);
-            relativePath = relativePath.Replace("\\", "/");
-
-            ModelAsset model = AssetDatabase.LoadAssetAtPath<ModelAsset>(relativePath);
-
-            if (model != null)
-            {
-                behaviorParameters.Model = model;
-                currentLoadedModel = bestFileName;
-                SetModelRewardStats(bestFileSpeed, bestFileWeight, bestFileAcc, bestFileSmooth);
-            }
-            else
-            {
-                Debug.LogWarning($"[ModelSelector] Found file {relativePath} but failed to load as NNModel.");
-            }
+            behaviorParameters.Model = bestModel;
+            currentLoadedModel = bestModel.name;
+            SetModelRewardStats(bestFileSpeed, bestFileWeight, bestFileAcc, bestFileSmooth);
+            //Debug.Log($"[ModelSelector] Successfully loaded new model: {bestModel.name}");
         }
-#else
-        Debug.LogWarning("[ModelSelector] This script currently relies on AssetDatabase and only works in the Unity Editor.");
-#endif
     }
 
     private void SetModelRewardStats(int fileSpeed, int fileWeight, int fileAcc, int fileSmooth)

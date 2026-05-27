@@ -28,6 +28,7 @@ public class GetVehicleData : MonoBehaviour
     private float currentContinuousDtC;
     private int currentContinuousLap = 1;
     private float lastT = 0f;
+    private float accumulatedT = 0f;
 
     void Start()
     {
@@ -60,6 +61,21 @@ public class GetVehicleData : MonoBehaviour
         lastAccelerationMag = currentAccelerationMagnitude;
         
         EvaluateSplineData();
+    }
+    
+    public void InitContinuousSplineState()
+    {
+        if (roadLayout == null || roadLayout.trackSpline == null) return;
+        
+        Spline spline = roadLayout.trackSpline.Spline;
+        Vector3 carWorldPos = carController.transform.position;
+        float3 carLocalPos = roadLayout.trackSpline.transform.InverseTransformPoint(carWorldPos);
+        SplineUtility.GetNearestPoint(spline, carLocalPos, out float3 nearestLocalPos, out float t);
+
+        lastT = t;
+        accumulatedT = 0f;
+        currentContinuousLap = 1;
+        currentContinuousProgressPercent = 0f;
     }
     
     public void CheckIfNextSegmentHasBeenReached()
@@ -117,20 +133,10 @@ public class GetVehicleData : MonoBehaviour
             roadSegment = roadLayout.roadSegments[0].gameObject;
         }
         
-        currentContinuousLap = 1;
-        lastT = 0f;
-        currentContinuousProgressPercent = 0f;
+        // currentContinuousLap = 1;
+        // lastT = 0f;
+        // currentContinuousProgressPercent = 0f;
     }
-
-    public float GetProgress()
-    {
-        if (roadLayout == null || roadSegment == null) return 0f;
-        float roadSegmentPercent = (float) roadSegment.transform.GetSiblingIndex() / (float) roadLayout.roadSegments.Count * 100.0f;
-        float accurateSegmentPercent = 1.0f / (float) roadLayout.roadSegments.Count * segmentProgress / 10.0f * 100.0f;
-        return Mathf.Clamp(roadSegmentPercent + accurateSegmentPercent, 0.0f, 100.0f);
-    }
-
-    public int GetLap() => chunkLap;
     
     private void EvaluateSplineData()
     {
@@ -142,32 +148,127 @@ public class GetVehicleData : MonoBehaviour
         Vector3 carWorldPos = carController.transform.position;
         float3 carLocalPos = roadLayout.trackSpline.transform.InverseTransformPoint(carWorldPos);
 
-        SplineUtility.GetNearestPoint(spline, carLocalPos, out float3 nearestLocalPos, out float t);
-
-        if (lastT > 0.8f && t < 0.2f) currentContinuousLap++;
-        else if (lastT < 0.2f && t > 0.8f) currentContinuousLap--; 
+        float t = GetLocalizedNearestT(spline, carLocalPos, lastT);
+        float3 nearestLocalPos = SplineUtility.EvaluatePosition(spline, t);
         
+        float deltaT = t - lastT;
+        if (deltaT < -0.5f)
+        {
+            deltaT += 1.0f; 
+        }
+        else if (deltaT > 0.5f)
+        {
+            deltaT -= 1.0f;
+        }
+
+        accumulatedT += deltaT;
         lastT = t;
-        currentContinuousProgressPercent = t * 100.0f;
+        currentContinuousProgressPercent = accumulatedT * 100.0f;
+        currentContinuousLap = Mathf.FloorToInt(accumulatedT) + 1;
 
         float3 trackForwardLocal = SplineUtility.EvaluateTangent(spline, t);
         Vector3 trackForwardWorld = roadLayout.trackSpline.transform.TransformDirection(trackForwardLocal);
-    
         Vector3 nearestWorldPos = roadLayout.trackSpline.transform.TransformPoint(nearestLocalPos);
         Vector3 flatCarPos = new Vector3(carWorldPos.x, 0f, carWorldPos.z);
         Vector3 flatNearestPos = new Vector3(nearestWorldPos.x, 0f, nearestWorldPos.z);
         Vector3 flatTrackToCar = flatCarPos - flatNearestPos;
-        
+
         float distance = flatTrackToCar.magnitude;
         Vector3 flatTrackForward = new Vector3(trackForwardWorld.x, 0f, trackForwardWorld.z).normalized;
         float side = Mathf.Sign(Vector3.Dot(Vector3.Cross(Vector3.up, flatTrackForward), flatTrackToCar));
-    
+        
         currentContinuousDtC = distance * side;
     }
+    
+    private float GetLocalizedNearestT(Spline spline, float3 localPos, float previousT)
+    {
+        float tCenter = previousT;
+        float stepSize = 0.005f; 
+        
+        float3 posCenter = SplineUtility.EvaluatePosition(spline, tCenter);
+        float distCenter = math.distancesq(localPos, posCenter);
+        
+        for (int i = 0; i < 10; i++) 
+        {
+            float tLeft = tCenter - stepSize;
+            float tRight = tCenter + stepSize;
+            
+            if (tLeft < 0f) tLeft += 1f;
+            if (tRight >= 1f) tRight -= 1f;
+
+            float3 posLeft = SplineUtility.EvaluatePosition(spline, tLeft);
+            float distLeft = math.distancesq(localPos, posLeft);
+            
+            float3 posRight = SplineUtility.EvaluatePosition(spline, tRight);
+            float distRight = math.distancesq(localPos, posRight);
+            
+            if (distLeft < distCenter && distLeft < distRight)
+            {
+                tCenter = tLeft;
+                distCenter = distLeft;
+            }
+            else if (distRight < distCenter && distRight < distLeft)
+            {
+                tCenter = tRight;
+                distCenter = distRight;
+            }
+            else
+            {
+                stepSize *= 0.5f;
+            }
+        }
+        
+        return tCenter;
+    }
+    
+    public void SyncDiscreteSegmentToSpline()
+    {
+        if (roadLayout == null || roadLayout.roadSegments.Count == 0) return;
+
+        Vector3 carPos = carController.transform.position;
+        Vector3 carForward = carController.transform.forward;
+
+        float closestDist = float.MaxValue;
+        int targetIdx = 0;
+
+        for (int i = 0; i < roadLayout.roadSegments.Count; i++)
+        {
+            Vector3 toPoint = roadLayout.roadSegments[i].BeginPoint.position - carPos;
+            float dist = toPoint.magnitude;
+            
+            if (Vector3.Dot(carForward, toPoint.normalized) > 0f)
+            {
+                if (dist < closestDist)
+                {
+                    closestDist = dist;
+                    targetIdx = i;
+                }
+            }
+        }
+
+        currentSegmentIndex = targetIdx;
+        nextPoint = roadLayout.roadSegments[currentSegmentIndex].BeginPoint;
+        chunkLap = 1;
+        
+        int adaptedIndex = currentSegmentIndex - 1;
+        if (adaptedIndex < 0) adaptedIndex = roadLayout.roadSegments.Count - 1;
+        roadSegment = roadLayout.roadSegments[adaptedIndex].gameObject;
+    }
+    
+    public float GetProgress()
+    {
+        if (roadLayout == null || roadSegment == null) return 0f;
+        float roadSegmentPercent = (float) roadSegment.transform.GetSiblingIndex() / (float) roadLayout.roadSegments.Count * 100.0f;
+        float accurateSegmentPercent = 1.0f / (float) roadLayout.roadSegments.Count * segmentProgress / 10.0f * 100.0f;
+        return Mathf.Clamp(roadSegmentPercent + accurateSegmentPercent, 0.0f, 100.0f);
+    }
+
+    public int GetLap() => chunkLap;
     
     public float GetContinuousDtC() => currentContinuousDtC;
     public float GetContinuousProgress() => currentContinuousProgressPercent;
     public int GetContinuousLap() => currentContinuousLap;
+    public float GetCurrentSplineT() => lastT;
     
     public Vector3 GetContinuousForwardVector() 
     {
@@ -209,10 +310,10 @@ public class GetVehicleData : MonoBehaviour
             Vector3 leftPairPos = roadSegment.transform.Find("DtC-Tracker").Find("P" + pairIndex + "L").transform.position;
             Vector3 rightPairPos = roadSegment.transform.Find("DtC-Tracker").Find("P" + pairIndex + "R").transform.position;
 
-#if UNITY_EDITOR
-            Debug.DrawLine(vehiclePos, leftPairPos, Color.white);
-            Debug.DrawLine(vehiclePos, rightPairPos, Color.white);
-#endif
+            if (GlobalSettings.showDebugRays) {
+                Debug.DrawLine(vehiclePos, leftPairPos, Color.white);
+                Debug.DrawLine(vehiclePos, rightPairPos, Color.white);
+            }
 
             pairDistances.Add(Vector2.Distance(new Vector2(leftPairPos.x, leftPairPos.z), new Vector2(vehiclePos.x, vehiclePos.z)) + Vector2.Distance(new Vector2(rightPairPos.x, rightPairPos.z), new Vector2(vehiclePos.x, vehiclePos.z)));
         }
@@ -221,10 +322,10 @@ public class GetVehicleData : MonoBehaviour
             Vector3 leftNextPairPos = nextReadSegment.transform.Find("DtC-Tracker").Find("P" + pairIndex + "L").transform.position;
             Vector3 rightNextPairPos = nextReadSegment.transform.Find("DtC-Tracker").Find("P" + pairIndex + "R").transform.position;
 
-#if UNITY_EDITOR
-            Debug.DrawLine(vehiclePos, leftNextPairPos, Color.blue);
-            Debug.DrawLine(vehiclePos, rightNextPairPos, Color.blue);
-#endif
+            if (GlobalSettings.showDebugRays) {
+                Debug.DrawLine(vehiclePos, leftNextPairPos, Color.blue);
+                Debug.DrawLine(vehiclePos, rightNextPairPos, Color.blue);
+            }
 
             pairDistances.Add(Vector2.Distance(new Vector2(leftNextPairPos.x, leftNextPairPos.z), new Vector2(vehiclePos.x, vehiclePos.z)) + Vector2.Distance(new Vector2(rightNextPairPos.x, rightNextPairPos.z), new Vector2(vehiclePos.x, vehiclePos.z)));
         }

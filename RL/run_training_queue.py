@@ -142,7 +142,7 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index, dashboa
         assigned_port = BASE_PORT + (worker_index * PORT_GAP)
 
         if worker_index < args.concurrency:
-            delay = worker_index * 5
+            delay = worker_index * 15
             if delay > 0:
                 dashboard.update_agent(run_id, 0, f"Waiting {delay}s...")
                 time.sleep(delay)
