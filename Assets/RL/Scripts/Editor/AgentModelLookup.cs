@@ -5,8 +5,8 @@ using System.Text.RegularExpressions;
 
 public class AgentModelLookup : EditorWindow
 {
-    private string sourceFolder = "";
-    private string targetFolder = "";
+    private string sourceFolder = "C:/Unity-Projects/DriveYourself/RL/results";
+    private string targetFolder = "C:/Unity-Projects/DriveYourself/Assets/RL/Resources/Models";
     private string runPrefix = "SpeedTest";
     private string modelFolderName = "TestModel";
     private bool debugMode = true;
@@ -95,7 +95,7 @@ public class AgentModelLookup : EditorWindow
 
         Log($"Starting... Looking for Prefix: '{cleanPrefix}' inside '{sourceFolder}'");
         
-        string pattern = $@"^{Regex.Escape(cleanPrefix)}-Agent_(\d+)[-_](S\d+)(?:-(W\d+))?(?:-(A\d+))?(?:-(Sm\d+))?$";
+        string pattern = $@"^{Regex.Escape(cleanPrefix)}.*-Agent_(\d+)[-_](S\d+)(?:-(W\d+))?(?:-(A\d+))?(?:-(Sm\d+))?$";
 
         Log($"Using Flexible Regex: {pattern}");
         Regex nameRegex = new Regex(pattern);

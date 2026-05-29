@@ -26,6 +26,8 @@ public class GetVehicleData : MonoBehaviour
     
     private float currentContinuousProgressPercent;
     private float currentContinuousDtC;
+    private float previousContinuousDtC;
+    private float continuousDtCVelocity;
     private int currentContinuousLap = 1;
     private float lastT = 0f;
     private float accumulatedT = 0f;
@@ -76,6 +78,8 @@ public class GetVehicleData : MonoBehaviour
         accumulatedT = 0f;
         currentContinuousLap = 1;
         currentContinuousProgressPercent = 0f;
+        previousContinuousDtC = 0f;
+        continuousDtCVelocity = 0f;
     }
     
     public void CheckIfNextSegmentHasBeenReached()
@@ -133,6 +137,9 @@ public class GetVehicleData : MonoBehaviour
             roadSegment = roadLayout.roadSegments[0].gameObject;
         }
         
+        previousContinuousDtC = 0f;
+        continuousDtCVelocity = 0f;
+        
         // currentContinuousLap = 1;
         // lastT = 0f;
         // currentContinuousProgressPercent = 0f;
@@ -178,6 +185,9 @@ public class GetVehicleData : MonoBehaviour
         float side = Mathf.Sign(Vector3.Dot(Vector3.Cross(Vector3.up, flatTrackForward), flatTrackToCar));
         
         currentContinuousDtC = distance * side;
+        
+        continuousDtCVelocity = (currentContinuousDtC - previousContinuousDtC) / Time.fixedDeltaTime;
+        previousContinuousDtC = currentContinuousDtC;
     }
     
     private float GetLocalizedNearestT(Spline spline, float3 localPos, float previousT)
@@ -266,6 +276,7 @@ public class GetVehicleData : MonoBehaviour
     public int GetLap() => chunkLap;
     
     public float GetContinuousDtC() => currentContinuousDtC;
+    public float GetContinuousDtCVelocity() => continuousDtCVelocity;
     public float GetContinuousProgress() => currentContinuousProgressPercent;
     public int GetContinuousLap() => currentContinuousLap;
     public float GetCurrentSplineT() => lastT;

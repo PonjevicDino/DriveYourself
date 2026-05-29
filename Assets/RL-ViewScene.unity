@@ -1885,7 +1885,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_BrainParameters:
-    VectorObservationSize: 25
+    VectorObservationSize: 29
     NumStackedVectorObservations: 4
     m_ActionSpec:
       m_NumContinuousActions: 2
@@ -1894,7 +1894,7 @@ MonoBehaviour:
     VectorActionDescriptions: []
     VectorActionSpaceType: 1
     hasUpgradedBrainParametersWithActionSpec: 1
-  m_Model: {fileID: 5022602860645237092, guid: b73434d34b260ae4f8b6358e47db08f7, type: 3}
+  m_Model: {fileID: 5022602860645237092, guid: 41e7ae3d06d5dce40b5a5b88643b6543, type: 3}
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: TestModel
@@ -1926,15 +1926,15 @@ MonoBehaviour:
   agentSpdText: {fileID: 1073547967}
   agentRpmText: {fileID: 868582843}
   agentDtCText: {fileID: 880381071}
-  targetSpeed: 100
+  targetSpeed: 20
   maxAllowedRewardDtc: 5
-  DtCRewardPercent: 100
+  DtCRewardPercent: 0
   accelTime0to100: 10
-  inputSmoothnessThreshold: 0
+  inputSmoothnessThreshold: 2
   minCurriculumTrainingSpeed: 40
   steeringSpeed: 0.25
   pedalSpeed: 0.25
-  endEpisodeAfterCompletedLaps: 3
+  endEpisodeAfterCompletedLaps: 2147483647
   endEpisodeCarYPosition: -1
   endEpisodeCarStuckSeconds: 2147483647
   startingPositionSidewaysOffset: 5
@@ -1999,12 +1999,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rootFolder: Assets/RL/Models
-  runPrefix: SpeedDtCTest
-  targetSpeed: 100
-  targetWeight: 100
+  runPrefix: SpeedDtCSmoothnessTest
+  targetSpeed: 20
+  targetWeight: 0
   targetAccelTime: 20
-  targetSmoothness: 10
-  currentLoadedModel: SpeedDtCTest-Agent_529-S100-W100-A10-Sm0.onnx
+  targetSmoothness: 0
+  currentLoadedModel: SpeedDtCSmoothnessTest-Agent_001-S020-W0-A10-Sm0
   boActive: 0
   boStartCommandGiven: 0
 --- !u!1 &355382647
@@ -12500,7 +12500,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   mode: 1
-  size: {x: 194.63177, y: 3.100001, z: 268.87177}
+  size: {x: 194.6318, y: 3.100001, z: 268.8718}
   overrideRendererFilters: 0
   minRendererVolumeSize: 0.1
   objectLayerMask:
@@ -12540,7 +12540,7 @@ Transform:
   m_GameObject: {fileID: 1380958843}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 88.24, y: 0.050000504, z: 81.03999}
+  m_LocalPosition: {x: 88.24001, y: 0.050000504, z: 81.04001}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

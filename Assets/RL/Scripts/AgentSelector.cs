@@ -22,7 +22,7 @@ public class AgentSelector : MonoBehaviour
     [UnityEngine.Range(20, 100)] public int targetSpeed = 20;
     [UnityEngine.Range(0, 100)] public int targetWeight = 85;
     [UnityEngine.Range(5, 20)] public int targetAccelTime = 10;
-    [UnityEngine.Range(0, 10)] public int targetSmoothness = 5;
+    [UnityEngine.Range(0, 9)] public int targetSmoothness = 5;
 
     [Header("Status")]
     [SerializeField] private string currentLoadedModel = "None";
@@ -173,22 +173,22 @@ public class AgentSelector : MonoBehaviour
 
     private void SetModelRewardStats(int fileSpeed, int fileWeight, int fileAcc, int fileSmooth)
     {
-        int speedRewardPercent = fileWeight; 
-        int accTime = fileAcc == 0 ? 10 : fileAcc; 
-        float calculatedThreshold = 0.0f; 
-        if (fileSmooth != 0) 
-        {
-            float smoothSeconds = (fileSmooth - 2.0f) / 8.0f * 6.0f;
-            if (smoothSeconds > 0.1f)
-            {
-                calculatedThreshold = 1.0f / (smoothSeconds * 50.0f);
-            }
-        }
-        
         agent.targetSpeed = fileSpeed;
-        agent.DtCRewardPercent = speedRewardPercent;
-        agent.accelTime0to100 = accTime;
-        agent.inputSmoothnessThreshold = calculatedThreshold;
+        agent.DtCRewardPercent = fileWeight;
+        agent.accelTime0to100 = fileAcc == 0 ? 10 : fileAcc; 
+        
+        float fullRange = 2.0f;
+        float physicsFps = 50.0f;
+
+        if (fileSmooth <= 0) 
+        {
+            agent.inputSmoothnessThreshold = fullRange;
+        }
+        else 
+        {
+            float totalFrames = fileSmooth * physicsFps;
+            agent.inputSmoothnessThreshold = fullRange / totalFrames;
+        }
     }
 
     private void ReadValuesFromBO()
