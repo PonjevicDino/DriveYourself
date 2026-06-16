@@ -12,9 +12,11 @@ public static class GlobalSettings
 
 public class OpenLabDayHandler : MonoBehaviour
 {
+    [SerializeField] private bool simPcSetting = false;
     [SerializeField] private Slider speedSlider;
     [SerializeField] private Slider dtcSlider;
-    [SerializeField] private TextMeshProUGUI currentModelSet;
+    [SerializeField] private Slider accelerationSlider;
+    [SerializeField] private Slider smoothnessSlider;
 
     private AgentSelector agentSelector;
     private DriveYourselfAgent driveYourselfAgent;
@@ -34,6 +36,8 @@ public class OpenLabDayHandler : MonoBehaviour
             Debug.LogError("Only one Agent should be in the ViewScene so that the Sliders can work");
             speedSlider.transform.parent.gameObject.SetActive(false);
             dtcSlider.transform.parent.gameObject.SetActive(false);
+            accelerationSlider.transform.parent.gameObject.SetActive(false);
+            smoothnessSlider.transform.parent.gameObject.SetActive(false);
             this.enabled = false;
             return;
         }
@@ -50,6 +54,8 @@ public class OpenLabDayHandler : MonoBehaviour
         
         speedSlider.onValueChanged.AddListener(delegate {UpdateAgentSpeed();});
         dtcSlider.onValueChanged.AddListener(delegate {UpdateAgentDtC();});
+        accelerationSlider.onValueChanged.AddListener(delegate {UpdateAgentAcceleration();});
+        smoothnessSlider.onValueChanged.AddListener(delegate {UpdateAgentSmoothness();});
 
         LaunchMultiDisplay();
     }
@@ -58,7 +64,6 @@ public class OpenLabDayHandler : MonoBehaviour
     {
         CheckForReset();
         CheckForDebugGizmos();
-        CheckForDifferentModelSet();
         
         if (GlobalSettings.showDebugRays)
         {
@@ -184,10 +189,15 @@ public class OpenLabDayHandler : MonoBehaviour
         {
             float currentT = vehicleData.GetCurrentSplineT();
             Spline spline = roadLayout.trackSpline.Spline;
+            
+            float trackLength = spline.GetLength();
+            float speedFactor = driveYourselfAgent.targetSpeed / 20.0f; 
+            float dynamicLookAheadDistance = driveYourselfAgent.lookAheadDistanceMeters * speedFactor;
+            float tStep = dynamicLookAheadDistance / trackLength;
 
             for (int i = 1; i <= driveYourselfAgent.lookAheadSegments; i++)
             {
-                float lookAheadT = (currentT + (i * 0.02f)) % 1.0f;
+                float lookAheadT = (currentT + (i * tStep)) % 1.0f;
 
                 float3 localPos = SplineUtility.EvaluatePosition(spline, lookAheadT);
                 Vector3 worldPos = roadLayout.trackSpline.transform.TransformPoint(localPos);
@@ -243,27 +253,9 @@ public class OpenLabDayHandler : MonoBehaviour
         }
     }
 
-    private void CheckForDifferentModelSet()
-    {
-        if (Input.GetKeyDown(KeyCode.S))
-        {
-            if (agentSelector.runPrefix != "SpeedDtCTest")
-            {
-                agentSelector.runPrefix = "SpeedDtCTest";
-                currentModelSet.text = "Change Model \\t S\nPrecise (Experimental)";
-            }
-            else if (agentSelector.runPrefix != "SpeedDtCTestShort")
-            {
-                agentSelector.runPrefix = "SpeedDtCTestShort";
-                currentModelSet.text = "Change Model \\t S\n5 Step PoC";
-            }
-            agentSelector.FindAndAssignModel();
-        }
-    }
-
     private void UpdateAgentSpeed()
     {
-        int sliderTargetSpeed = Mathf.RoundToInt(Mathf.Lerp(20.0f, 100.0f, speedSlider.value));
+        int sliderTargetSpeed = Mathf.RoundToInt(Mathf.Lerp(50.0f, 100.0f, speedSlider.value));
         agentSelector.targetSpeed = sliderTargetSpeed;
         agentSelector.FindAndAssignModel();
     }
@@ -274,23 +266,49 @@ public class OpenLabDayHandler : MonoBehaviour
         agentSelector.targetWeight = sliderTargetDtC;
         agentSelector.FindAndAssignModel();
     }
+    
+    private void UpdateAgentAcceleration()
+    {
+        int sliderTargetAcceleration = Mathf.RoundToInt(Mathf.Lerp(5.0f, 15.0f, accelerationSlider.value));
+        agentSelector.targetAccelTime = sliderTargetAcceleration;
+        agentSelector.FindAndAssignModel();
+    }
+    
+    private void UpdateAgentSmoothness()
+    {
+        int sliderTargetSmoothness = Mathf.RoundToInt(Mathf.Lerp(0.0f, 9.0f, smoothnessSlider.value));
+        agentSelector.targetSmoothness = sliderTargetSmoothness;
+        agentSelector.FindAndAssignModel();
+    }
 
     private void LaunchMultiDisplay()
     {
         QualitySettings.vSyncCount = 1;
         Display.displays[0].SetRenderingResolution(Display.displays[0].systemWidth, Display.displays[0].systemHeight);
-        
-        if (Display.displays.Length > 2)
+
+        if (simPcSetting)
         {
-            Display.displays[2].Activate();
-            Display.displays[2].SetRenderingResolution(Display.displays[2].systemWidth, Display.displays[2].systemHeight);
-            Debug.Log("Bypassed Display 1. Successfully activated Display 2 on Monitor 2.");
+            if (Display.displays.Length > 2)
+            {
+                Display.displays[2].Activate();
+                Display.displays[2].SetRenderingResolution(Display.displays[2].systemWidth, Display.displays[2].systemHeight);
+                Debug.Log("Bypassed Display 1. Successfully activated Display 2 on Monitor 2.");
+            }
+            else if (Display.displays.Length > 1)
+            {
+                Display.displays[1].Activate();
+                Display.displays[1].SetRenderingResolution(Display.displays[1].systemWidth, Display.displays[1].systemHeight);
+                Debug.LogWarning("Only two monitors detected. Activating standard Display 1.");
+            }
         }
-        else if (Display.displays.Length > 1)
+        else
         {
-            Display.displays[1].Activate();
-            Display.displays[1].SetRenderingResolution(Display.displays[1].systemWidth, Display.displays[1].systemHeight);
-            Debug.LogWarning("Only two monitors detected. Activating standard Display 1.");
+            if (Display.displays.Length > 1)
+            {
+                Display.displays[1].Activate();
+                Display.displays[1].SetRenderingResolution(Display.displays[1].systemWidth, Display.displays[1].systemHeight);
+                Debug.LogWarning("Only two monitors detected. Activating standard Display 1.");
+            }
         }
     }
 }

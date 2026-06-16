@@ -2,14 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using BOforUnity.Scripts;
-using QuestionnaireToolkit.Scripts;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.Assertions.Must;
-using UnityEngine.SceneManagement;
-using UnityEngine.Serialization;
-using UnityEngine.UI;
 using PythonStarter = BOforUnity.Scripts.PythonStarter;
 
 namespace BOforUnity
@@ -89,9 +84,6 @@ namespace BOforUnity
         
         void Start()
         {
-            loadingObj.SetActive(true);
-            nextButton.SetActive(false);
-
             initialized = false;
             _waitingForPythonProcess = true;
             perfectRating = false;
@@ -110,28 +102,17 @@ namespace BOforUnity
         //-----------------------------------------------
         
         
-        // CONTROLLER SCENE
-        //-----------------------------------------------
-        public TMP_Text outputText;
-        public GameObject loadingObj;
-        public GameObject nextButton;
-
-        public GameObject welcomePanel;
-        public GameObject optimizerStatePanel;
-        
         public bool optimizationRunning = false;
         public bool optimizationFinished = false;
 
         //Starts a new iteration
         public void ButtonNextIteration()
         {
-            loadingObj.SetActive(true); // show loading
-            nextButton.SetActive(false); // hide next button
+            // show loading
+            // hide next button
 
             if (currentIteration == 0)
             {
-                welcomePanel.SetActive(false);
-                optimizerStatePanel.SetActive(false);
                 return;
             }
 
@@ -156,7 +137,6 @@ namespace BOforUnity
             if (currentIteration <= totalIterations && !isPerfect)
             {
                 // hide the panel as the next iteration starts after scene is reloaded
-                optimizerStatePanel.SetActive(false);
                 
                 Debug.Log("--------------------------------------Current Iteration: " + currentIteration);
 
@@ -180,9 +160,6 @@ namespace BOforUnity
                 socketNetwork.SocketQuit();
                 // load a final scene or...
                 // show the End Message
-                outputText.text = "The simulation has finished!\nYou can now close the application.";
-                loadingObj.SetActive(false);
-                nextButton.SetActive(false);
             }
         }
         
@@ -194,10 +171,7 @@ namespace BOforUnity
             optimizationRunning = true;
             simulationRunning = false;
 
-            optimizerStatePanel.SetActive(true); // show that the optimizer is running
-            loadingObj.SetActive(true);
-            nextButton.SetActive(false);
-            outputText.text = "The system is loading, please wait ...";
+            // show that the optimizer is running
         }
         
         public void OptimizationDone()
@@ -209,9 +183,7 @@ namespace BOforUnity
             // ---------------
             optimizationRunning = false;
             
-            loadingObj.SetActive(false); // hide as the optimizer has finished running
-            nextButton.SetActive(true);
-            outputText.text = "The system has finished loading.\nYou can now proceed.";
+            // hide as the optimizer has finished running
             
             currentIteration++; // increase iteration counter
 
@@ -229,9 +201,8 @@ namespace BOforUnity
             optimizationRunning = false;
             
             initialized = true;
-            loadingObj.SetActive(false); // hide loading circle
-            nextButton.SetActive(true); // show next button
-            outputText.text = "The system has been started successfully!\nYou can now start the study.";
+            // hide loading circle
+            // show next button
         }
         
         private void PythonInitializationDone()

@@ -8,6 +8,7 @@ import ctypes
 import sys
 import re
 import threading
+import glob
 import tkinter as tk
 from tkinter import ttk
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -156,12 +157,18 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index, dashboa
         log_file_path = f"terminal_log_{run_id}.txt"
         local_config = base_yaml_config.copy()
 
+        agents_per_scene = 64
+        num_envs = 4
+        total_global_agents = agents_per_scene * num_envs
+
         local_config["environment_parameters"] = {
             "difficulty_ratio": 1.0,
             "target_speed": float(speed),
             "dtc_weight": float(dtc_weight),
             "acc_time": float(agent_data.get("acc_time", 10.0)),
-            "smooth_threshold": float(agent_data.get("smooth_threshold", 1.0))
+            "smooth_threshold": float(agent_data.get("smooth_threshold", 1.0)),
+            "max_python_steps": float(args.steps),
+            "total_global_agents": float(total_global_agents)
         }
 
         if 'behaviors' in local_config:
@@ -211,6 +218,14 @@ def train_single_agent(agent_data, base_yaml_config, args, worker_index, dashboa
             dashboard.increment_main()
             dashboard.set_title(f"Overall Progress: {dashboard.main_completed}/{dashboard.total_agents}")
             print(f" [Worker {worker_index}] FINISHED: {run_id} (Success)")
+            run_results_dir = os.path.join("results", run_id)
+            if os.path.exists(run_results_dir):
+                pt_files = glob.glob(os.path.join(run_results_dir, "**", "*.pt"), recursive=True)
+                for pt_file in pt_files:
+                    try:
+                        os.remove(pt_file)
+                    except Exception as e:
+                        print(f" [Worker {worker_index}] Warning: Could not delete {pt_file} ({e})")
             if os.path.exists(log_file_path):
                 os.remove(log_file_path)
             return True

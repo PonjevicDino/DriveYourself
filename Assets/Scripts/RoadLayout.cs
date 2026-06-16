@@ -1,6 +1,10 @@
 using Assets.Scripts.Components;
 using System.Collections.Generic;
 using Unity.Mathematics;
+using UnityEditor;
+#if UNITY_EDITOR
+using UnityEditor.SceneManagement;
+#endif
 using UnityEngine;
 using UnityEngine.Splines;
 
@@ -28,6 +32,35 @@ public class RoadLayout : MonoBehaviour
         {
             Debug.LogWarning("No RoadLayout found during Awake - Spline generation skipped.");
         }
+    }
+
+    [ContextMenu("Assign Track Names")]
+    public void AssignTrackNames()
+    {
+        for (int child = 0; child < this.transform.childCount; child++)
+        {
+            Transform childTransform = transform.GetChild(child);
+            RoadSegment childRoadSegment = childTransform.GetComponent<RoadSegment>();
+#if UNITY_EDITOR
+            Undo.RecordObject(childTransform.gameObject, "Assign Track Name");
+            Undo.RecordObject(childRoadSegment, "Assign Track Number");
+#endif
+            
+            childTransform.name = "Track_" + childRoadSegment.Type.ToString() + "_Segment_" + child;
+            childRoadSegment.RoadSegmentNumber = child;
+
+#if UNITY_EDITOR
+            EditorUtility.SetDirty(childTransform.gameObject);
+            EditorUtility.SetDirty(childRoadSegment);
+#endif
+        }
+
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            EditorSceneManager.MarkSceneDirty(gameObject.scene);
+        }
+#endif
     }
 
     [ContextMenu("Generate Track Spline")]

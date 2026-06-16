@@ -2,15 +2,15 @@ behaviors:
   TestModel:
     trainer_type: ppo
     hyperparameters:
-      batch_size: 4096
-      buffer_size: 40960
-      learning_rate: 0.00015
-      beta: 0.0025
+      batch_size: 20480
+      buffer_size: 204800
+      learning_rate: 0.000225
+      beta: 0.00125
       epsilon: 0.2
       epsilon_schedule: constant   
       lambd: 0.95
       num_epoch: 4
-      learning_rate_schedule: linear
+      learning_rate_schedule: constant
       beta_schedule: constant
     network_settings:
       normalize: true
@@ -26,7 +26,7 @@ behaviors:
         strength: 1.0
     max_steps: 320000000  # ~ 5.000.000 times Envs (16/8) times Agents (4)
     checkpoint_interval: 1000000 
-    keep_checkpoints: 25
-    time_horizon: 128
-    summary_freq: 50000  # ~ 5.000 times Envs (16/8) times Agents (4) | Adapted
+    keep_checkpoints: 1000
+    time_horizon: 512
+    summary_freq: 100000  # ~ 5.000 times Envs (16/8) times Agents (4) | Adapted
     threaded: true

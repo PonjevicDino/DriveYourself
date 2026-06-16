@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Unity.InferenceEngine;
 using BOforUnity;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -19,10 +20,14 @@ public class AgentSelector : MonoBehaviour
     public string runPrefix = "Run001";
 
     [Header("Agent Parameters")]
-    [UnityEngine.Range(20, 100)] public int targetSpeed = 20;
+    [UnityEngine.Range(50, 100)] public int targetSpeed = 50;
     [UnityEngine.Range(0, 100)] public int targetWeight = 85;
-    [UnityEngine.Range(5, 20)] public int targetAccelTime = 10;
-    [UnityEngine.Range(0, 9)] public int targetSmoothness = 5;
+    [UnityEngine.Range(5, 15)] public int targetAccelTime = 10;
+    [UnityEngine.Range(1, 9)] public int targetSmoothness = 5;
+    private int oldTargetSpeed;
+    private int oldTargetWeight;
+    private int oldTargetAccelTime;
+    private int oldTargetSmoothness;
 
     [Header("Status")]
     [SerializeField] private string currentLoadedModel = "None";
@@ -37,6 +42,11 @@ public class AgentSelector : MonoBehaviour
     private int origEndEpisodeCarStuckSeconds = 0;
     private bool studyHasStarted = false;
 
+    private ModelAsset[] availableModels;
+    private string lastRunPrefix;
+    private string resourcesPath;
+
+
     private void OnEnable()
     {
         Initialize();
@@ -48,11 +58,20 @@ public class AgentSelector : MonoBehaviour
 
     private void OnValidate()
     {
+        
         if (!this.enabled) return;
         Initialize();
-        if (!boActive)
+        if (!boActive) 
         {
-            FindAndAssignModel();
+            if (targetSpeed != oldTargetSpeed || targetWeight != oldTargetWeight ||
+                targetAccelTime != oldTargetAccelTime || targetSmoothness != oldTargetSmoothness)
+            {
+                oldTargetSpeed = targetSpeed;
+                oldTargetWeight = targetWeight;
+                oldTargetAccelTime = targetAccelTime;
+                oldTargetSmoothness = targetSmoothness;
+                FindAndAssignModel();
+            }
         }
     }
 
@@ -80,6 +99,8 @@ public class AgentSelector : MonoBehaviour
             agent.endEpisodeCarStuckSeconds = int.MaxValue;
             agent.transform.parent.GetComponent<Rigidbody>().isKinematic = true;
         }
+        
+        SearchInModelDatabase();
     }
 
     private void Update()
@@ -106,32 +127,63 @@ public class AgentSelector : MonoBehaviour
             agent = GetComponent<DriveYourselfAgent>();
     }
 
-    public void FindAndAssignModel()
+    public async void FindAndAssignModel()
     {
         if (behaviorParameters == null) return;
-        string resourcesPath = "Models/" + runPrefix; 
-        ModelAsset[] availableModels = Resources.LoadAll<ModelAsset>(resourcesPath);
 
-        if (availableModels.Length == 0)
+        if (lastRunPrefix != runPrefix)
+        {
+            lastRunPrefix = runPrefix;
+            resourcesPath = "Models/" + runPrefix;
+            SearchInModelDatabase();
+        }
+        
+        if (availableModels == null || availableModels.Length == 0)
         {
             Debug.LogWarning($"[ModelSelector] No models found in Resources path: {resourcesPath}. Keeping previous model.");
             return;
         }
+        
+        string[] modelNames = new string[availableModels.Length];
+        for (int i = 0; i < availableModels.Length; i++)
+        {
+            modelNames[i] = availableModels[i].name;
+        }
+        
+        int currentTargetSpeed = targetSpeed;
+        int currentTargetWeight = targetWeight;
+        int currentTargetAccelTime = targetAccelTime;
+        int currentTargetSmoothness = targetSmoothness;
+        
+        int bestIndex = await Task.Run(() => 
+        {
+            return GetBestModelIndex(modelNames, currentTargetSpeed, currentTargetWeight, currentTargetAccelTime, currentTargetSmoothness);
+        });
+        
+        if (bestIndex != -1)
+        {
+            ModelAsset bestModel = availableModels[bestIndex];
 
+            if (currentLoadedModel == bestModel.name && behaviorParameters.Model != null) return;
+
+            behaviorParameters.Model = bestModel;
+            currentLoadedModel = bestModel.name;
+            
+            ApplyModelStatsFromName(bestModel.name);
+        }
+    }
+    
+    private int GetBestModelIndex(string[] names, int tSpeed, int tWeight, int tAccel, int tSmooth)
+    {
         string pattern = @"Agent_(\d+)-S(\d+)-W(\d+)-A(\d+)-Sm(\d+)";
         Regex regex = new Regex(pattern);
 
-        ModelAsset bestModel = null;
+        int bestIndex = -1;
         float minDistance = float.MaxValue;
-        
-        int bestFileSpeed = 0;
-        int bestFileWeight = 0;
-        int bestFileAcc = 0;
-        int bestFileSmooth = 0;
 
-        foreach (ModelAsset model in availableModels)
+        for (int i = 0; i < names.Length; i++)
         {
-            Match match = regex.Match(model.name);
+            Match match = regex.Match(names[i]);
 
             if (match.Success)
             {
@@ -140,35 +192,42 @@ public class AgentSelector : MonoBehaviour
                 int fileAcc = int.Parse(match.Groups[4].Value);
                 int fileSmooth = int.Parse(match.Groups[5].Value);
 
-                float dSpeed = (targetSpeed - fileSpeed) / 100.0f;
-                float dWeight = (targetWeight - fileWeight) / 100.0f;
-                float dAcc = (targetAccelTime - fileAcc) / 20.0f;
-                float dSmooth = (targetSmoothness - fileSmooth) / 10.0f;
+                float dSpeed = (tSpeed - fileSpeed) / 100.0f;
+                float dWeight = (tWeight - fileWeight) / 100.0f;
+                float dAcc = (tAccel - fileAcc) / 20.0f;
+                float dSmooth = (tSmooth - fileSmooth) / 10.0f;
 
                 float dist = (dSpeed * dSpeed) + (dWeight * dWeight) + (dAcc * dAcc) + (dSmooth * dSmooth);
 
                 if (dist < minDistance)
                 {
                     minDistance = dist;
-                    bestModel = model;
-                    
-                    bestFileSpeed = fileSpeed;
-                    bestFileWeight = fileWeight;
-                    bestFileAcc = fileAcc;
-                    bestFileSmooth = fileSmooth;
+                    bestIndex = i;
                 }
             }
         }
-
-        if (bestModel != null)
+        
+        return bestIndex;
+    }
+    private void ApplyModelStatsFromName(string modelName)
+    {
+        string pattern = @"Agent_(\d+)-S(\d+)-W(\d+)-A(\d+)-Sm(\d+)";
+        Match match = Regex.Match(modelName, pattern);
+        
+        if(match.Success)
         {
-            if (currentLoadedModel == bestModel.name && behaviorParameters.Model != null) return;
-
-            behaviorParameters.Model = bestModel;
-            currentLoadedModel = bestModel.name;
-            SetModelRewardStats(bestFileSpeed, bestFileWeight, bestFileAcc, bestFileSmooth);
-            //Debug.Log($"[ModelSelector] Successfully loaded new model: {bestModel.name}");
+            int fileSpeed = int.Parse(match.Groups[2].Value);
+            int fileWeight = int.Parse(match.Groups[3].Value);
+            int fileAcc = int.Parse(match.Groups[4].Value);
+            int fileSmooth = int.Parse(match.Groups[5].Value);
+            
+            SetModelRewardStats(fileSpeed, fileWeight, fileAcc, fileSmooth);
         }
+    }
+
+    private void SearchInModelDatabase()
+    {
+        availableModels = Resources.LoadAll<ModelAsset>(resourcesPath);
     }
 
     private void SetModelRewardStats(int fileSpeed, int fileWeight, int fileAcc, int fileSmooth)

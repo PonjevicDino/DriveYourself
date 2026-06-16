@@ -43,9 +43,6 @@ namespace BOforUnity.Scripts
         {
             _bomanager = gameObject.GetComponent<BoForUnityManager>();
 
-            _bomanager.loadingObj.SetActive(true);
-            _bomanager.nextButton.SetActive(false);
-
             // Run setup async, then start Python process only after pip finished
             StartCoroutine(SetupThenLaunchCoroutine());
 
@@ -84,19 +81,10 @@ namespace BOforUnity.Scripts
             while (!installTask.IsCompleted)
             {
                 // Mirror status to UI if available
-                if (_bomanager.outputText != null)
-                    _bomanager.outputText.text = pythonInstallStatus;
                 yield return null;
             }
             pythonInstallSucceeded = installTask.Result;
             pythonInstallRunning = false;
-
-            if (_bomanager.outputText != null)
-            {
-                _bomanager.outputText.text = pythonInstallSucceeded
-                    ? "Python dependencies ready."
-                    : "Python setup incomplete. Continuing…";
-            }
 
             // Set an environment variable to allow for multiple instances of a dynamic link library.
             Environment.SetEnvironmentVariable("KMP_DUPLICATE_LIB_OK", "TRUE");
@@ -131,10 +119,6 @@ namespace BOforUnity.Scripts
         private void Update()
         {
             // Live status during install
-            if (pythonInstallRunning && _bomanager != null && _bomanager.outputText != null)
-            {
-                _bomanager.outputText.text = pythonInstallStatus;
-            }
 
             if (pythonProcess != null && pythonProcess.HasExited && !_exitMessageShown)
             {
@@ -142,8 +126,6 @@ namespace BOforUnity.Scripts
                 Debug.Log(">>>>> Python Process has EXITED!");
                 if (_bomanager.simulationRunning) // if the simulation is still running show an error message
                 {
-                    _bomanager.outputText.text = "The system could not be started...\nPlease restart the application.";
-                    _bomanager.loadingObj.SetActive(false);
                 }
             }
         }
@@ -202,9 +184,6 @@ namespace BOforUnity.Scripts
             {
                 Debug.Log("Failed to start Python process: " + ex.Message);
                 isPythonProcessRunning = false;
-                if (_bomanager?.outputText != null)
-                    _bomanager.outputText.text = "The system could not be started...\nPlease restart the application.";
-                if (_bomanager != null) _bomanager.loadingObj.SetActive(false);
             }
         }
 

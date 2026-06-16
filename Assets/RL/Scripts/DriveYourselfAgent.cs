@@ -16,6 +16,7 @@ public class DriveYourselfAgent : Agent
     private float episodeSpeedDeviation;
     private float episodeMaxAcceleration;
     private float episodeSmoothnessPenalty;
+    private float episodeAccelerationPenalty;
     private float episodeDtCReward;
     private float episodeDtCDeviation;
     private long episodeStepCount;
@@ -32,6 +33,7 @@ public class DriveYourselfAgent : Agent
     private float targetBrake;
 
     [SerializeField] public int lookAheadSegments;
+    [SerializeField] public float lookAheadDistanceMeters = 10f;
 
     [SerializeField] private TextMeshProUGUI agentAccText;
     [SerializeField] private TextMeshProUGUI agentBrkText;
@@ -41,7 +43,7 @@ public class DriveYourselfAgent : Agent
     [SerializeField] private TextMeshProUGUI agentDtCText;
 
     [Header("Rewards")]
-    [SerializeField, Range(20.0f, 100.0f)] public float targetSpeed;
+    [SerializeField, Range(50.0f, 100.0f)] public float targetSpeed;
     //[SerializeField, Min(0f)] private float maxAllowedSafeAcc;
     //[SerializeField, Min(0f)] private float maxAllowedRewardAcc;
     //[SerializeField, Range(0.0f,100.0f)] private float accRewardPercent;
@@ -50,7 +52,7 @@ public class DriveYourselfAgent : Agent
     //[SerializeField, Range(0.0f,100.0f)] private float jerkRewardPercent;
     [SerializeField, Min(0f)] private float maxAllowedRewardDtc;
     [SerializeField, Range(0.0f, 100.0f)] public float DtCRewardPercent;
-    [SerializeField, Range(5.0f, 20.0f)] public float accelTime0to100 = 10.0f;
+    [SerializeField, Range(5.0f, 15.0f)] public float accelTime0to100 = 10.0f;
     [SerializeField, Range(0.0f, 2.0f)] public float inputSmoothnessThreshold = 0.5f;
 
     [Header("Speeds")]
@@ -150,8 +152,14 @@ public class DriveYourselfAgent : Agent
             float minRatio = minCurriculumTrainingSpeed / Mathf.Max(rawTargetSpeed, 1.0f);
             effectiveRatio = Mathf.Clamp(Mathf.Max(difficultyRatio, minRatio), 0.0f, 1.0f);
             targetSpeed = Mathf.Max(rawTargetSpeed * effectiveRatio, 20.0f);
-            smoothnessProgression = Academy.Instance.EnvironmentParameters.GetWithDefault("smoothness_progression", 1.0f);
             dtcProgression = Academy.Instance.EnvironmentParameters.GetWithDefault("dtc_progression", 1.0f);
+            
+            float maxPythonSteps = Academy.Instance.EnvironmentParameters.GetWithDefault("max_python_steps", 1000000f);
+            float totalGlobalAgents = Academy.Instance.EnvironmentParameters.GetWithDefault("total_global_agents", 256f);
+            float maxAcademySteps = maxPythonSteps / totalGlobalAgents;
+            float curriculumPacingSteps = maxAcademySteps * 0.6f; 
+            float currentProgress = Mathf.Clamp01((float)Academy.Instance.StepCount / curriculumPacingSteps);
+            smoothnessProgression = currentProgress;
         }
 
         lastThrottleInput = 0.0f;
@@ -168,6 +176,7 @@ public class DriveYourselfAgent : Agent
         episodeStepCount = 0L;
         episodeMaxAcceleration = 0.0f;
         episodeSmoothnessPenalty = 0.0f;
+        episodeAccelerationPenalty = 0.0f;
 
         ForceDisableAllParticles();
 
@@ -217,7 +226,7 @@ public class DriveYourselfAgent : Agent
 #endif
         vehicleData.ResetVars();
         carController.canGoReverseNow = false;
-        carController.currentGear = 1;
+        carController.currentGear = 0;
         //carController.GetComponent<Rigidbody>().isKinematic = true;
         //carController.engineRunning = false; 
         //carController.engineRPMRaw = 0;
@@ -249,8 +258,8 @@ public class DriveYourselfAgent : Agent
     public override void Heuristic(in ActionBuffers actionsOut)
     {
         var actions = actionsOut.ContinuousActions;
-        actions[0] = Input.GetKey(KeyCode.UpArrow) ? 1 : Input.GetKey(KeyCode.DownArrow) ? -1 : 0;
-        actions[1] = Input.GetKey(KeyCode.RightArrow) ? 1 : Input.GetKey(KeyCode.LeftArrow) ? -1 : 0;
+        actions[0] = Input.GetKey(KeyCode.UpArrow) ? 1.0f : Input.GetKey(KeyCode.DownArrow) ? -1f : 0;
+        actions[1] = Input.GetKey(KeyCode.RightArrow) ? 1.0f : Input.GetKey(KeyCode.LeftArrow) ? -1 : 0;
     }
 
     public override void CollectObservations(VectorSensor sensor)
@@ -266,14 +275,15 @@ public class DriveYourselfAgent : Agent
         sensor.AddObservation(inputSmoothnessThreshold / 2.0f);
 
         sensor.AddObservation(vehicleData.GetSpeed() / 100f);
-        sensor.AddObservation(Mathf.Clamp(vehicleData.GetAccelleration(), 0f, 20f) / 20f);
+        Vector3 currentAccelVec = vehicleData.GetAccellerationVector();
+        sensor.AddObservation(Mathf.Clamp(currentAccelVec.z, -20f, 20f) / 20f);
+        sensor.AddObservation(Mathf.Clamp(currentAccelVec.x, -10f, 10f) / 10f);
         sensor.AddObservation(Mathf.Clamp(vehicleData.GetContinuousDtC() / maxAllowedRewardDtc, -1f, 1f));
         sensor.AddObservation(Mathf.Clamp(vehicleData.GetContinuousDtCVelocity() / 10f, -1f, 1f));
 
         sensor.AddObservation(carController.throttleInput);
         sensor.AddObservation(carController.brakeInput);
         sensor.AddObservation(currentSteeringAngle / carController.steerAngle);
-        sensor.AddObservation(carController.currentGear / 6.0f);
         
         sensor.AddObservation(targetThrottle);
         sensor.AddObservation(targetBrake);
@@ -281,7 +291,7 @@ public class DriveYourselfAgent : Agent
 
         Vector3 localVelocity = carController.transform.InverseTransformDirection(carRb.linearVelocity);
         sensor.AddObservation(localVelocity.x / 10.0f);
-        sensor.AddObservation(localVelocity.z / 27.7f); // 27,7 m/s = 100 km/h
+        sensor.AddObservation(localVelocity.z / 27.78f); // 27.78 m/s = 100 km/h
 
         // GameObject currentSegment = vehicleData.GetRoadSegment();
         // switch (currentSegment.name.Split("_")[1])
@@ -299,13 +309,17 @@ public class DriveYourselfAgent : Agent
 
         float currentT = vehicleData.GetCurrentSplineT();
         Spline spline = vehicleData.roadLayout.trackSpline.Spline;
+        float trackLength = spline.GetLength();
+        float speedFactor = targetSpeed / 20.0f; 
+        float dynamicLookAheadDistance = lookAheadDistanceMeters * speedFactor;
+        float tStep = dynamicLookAheadDistance / trackLength;
 
         Vector3 carPos = carController.transform.position;
         Vector3 carForward = carController.transform.forward;
 
         for (int i = 1; i <= lookAheadSegments; i++)
         {
-            float lookAheadT = (currentT + (i * 0.02f)) % 1.0f;
+            float lookAheadT = (currentT + (i * tStep)) % 1.0f;
 
             float3 localPos = SplineUtility.EvaluatePosition(spline, lookAheadT);
             Vector3 worldPos = vehicleData.roadLayout.trackSpline.transform.TransformPoint(localPos);
@@ -341,15 +355,7 @@ public class DriveYourselfAgent : Agent
         float rawForwardAction = actions.ContinuousActions[0];
         if (rawForwardAction > 0.01f)
         {
-            if (carController.currentGear == 0 || carController.direction == -1) 
-            {
-                targetThrottle = Mathf.Lerp(0.15f, 1.0f, rawForwardAction);
-            }
-            else 
-            {
-                targetThrottle = rawForwardAction; 
-            }
-            
+            targetThrottle = rawForwardAction; 
             targetBrake = 0.0f;
         }
         else if (rawForwardAction < -0.01f)
@@ -457,53 +463,96 @@ public class DriveYourselfAgent : Agent
         // float smoothMultiplier = CalculateCliffReward(totalTwitch, effectiveThreshold, 0.1f);
         
             // Reward for Progress + Speed + DtC + Smoothness
-            decisionStepCounter++;
-            if (decisionStepCounter >= decisionPeriod)
-            {
-                float deltaInput = Mathf.Abs(targetThrottle - lastThrottleInput) + Mathf.Abs(targetBrake - lastBrakeInput);
-                float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction);
-                float totalTwitch = deltaInput + deltaSteer;
-                float effectiveThreshold = Mathf.Lerp(2.0f, inputSmoothnessThreshold * decisionPeriod, smoothnessProgression);
-                smoothMultiplier = CalculateCliffReward(totalTwitch, effectiveThreshold, 0.1f);
-                
-                lastThrottleInput = targetThrottle;
-                lastBrakeInput = targetBrake;
-                lastSteeringAction = targetSteer;
-                
-                episodeSmoothnessPenalty += (1.0f - smoothMultiplier);
-
-                decisionStepCounter = 0;
-            }
-            
-            float universalFloor = 0.25f;
-            float dtcMultiplier = Mathf.Lerp(universalFloor, 1.0f, dtcScore);
-            float combinedMultiplier = speedScore * dtcMultiplier * smoothMultiplier;
-            float stepReward = 0f;
-            if (baseAlignmentReward > 0f) {
-                stepReward = baseAlignmentReward * combinedMultiplier * 0.02f;
-            } else {
-                stepReward = baseAlignmentReward * 0.02f; 
-            }
-            
-            AddReward(stepReward);
+            // decisionStepCounter++;
+            // if (decisionStepCounter >= decisionPeriod)
+            // {
+            //     float deltaInput = Mathf.Abs(targetThrottle - lastThrottleInput) + Mathf.Abs(targetBrake - lastBrakeInput);
+            //     float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction);
+            //     float totalTwitch = deltaInput + deltaSteer;
+            //     float effectiveThreshold = Mathf.Lerp(2.0f, inputSmoothnessThreshold * decisionPeriod, smoothnessProgression);
+            //     smoothMultiplier = CalculateCliffReward(totalTwitch, effectiveThreshold, 0.1f);
+            //     
+            //     lastThrottleInput = targetThrottle;
+            //     lastBrakeInput = targetBrake;
+            //     lastSteeringAction = targetSteer;
+            //     
+            //     episodeSmoothnessPenalty += (1.0f - smoothMultiplier);
+            //
+            //     decisionStepCounter = 0;
+            // }
+            //
+            // float universalFloor = 0.25f;
+            // float dtcMultiplier = Mathf.Lerp(universalFloor, 1.0f, dtcScore);
+            // float combinedMultiplier = speedScore * dtcMultiplier * smoothMultiplier;
+            // float stepReward = 0f;
+            // if (baseAlignmentReward > 0f) {
+            //     stepReward = baseAlignmentReward * combinedMultiplier * 0.02f;
+            // } else {
+            //     stepReward = baseAlignmentReward * 0.02f; 
+            // }
+            //
+            // AddReward(stepReward);
             
             
         // Acceleration
         Vector3 accelVec = vehicleData.GetAccellerationVector();
-        float longitudinalAccel = Mathf.Abs(accelVec.z);
-        float engineLimit = (100.0f / 3.6f) / Mathf.Max(accelTime0to100, 1.0f) * 2.5f;
-        float accMultiplier = CalculateCliffReward(longitudinalAccel, engineLimit, 2.0f);
+        float longitudinalAccel = accelVec.z;
+        float accMultiplier = 1.0f;
 
-        if (longitudinalAccel > episodeMaxAcceleration)
+        if (longitudinalAccel > 0.0f) 
         {
-            episodeMaxAcceleration = longitudinalAccel;
+            float linearAvgAccel = 27.78f / Mathf.Max(accelTime0to100, 1.0f);
+            float strictEnginePeak = linearAvgAccel * 1.5f; 
+            float currentAllowedPeak = Mathf.Lerp(20.0f, strictEnginePeak, smoothnessProgression);
+            accMultiplier = CalculateCliffReward(longitudinalAccel, currentAllowedPeak, 5.0f);
         }
-
+        else 
+        {
+            float brakePhysicalLimit = 20.0f; 
+            accMultiplier = CalculateCliffReward(Mathf.Abs(longitudinalAccel), brakePhysicalLimit, 2.0f);
+        }
+        
+        if (Mathf.Abs(longitudinalAccel) > episodeMaxAcceleration)
+        {
+            episodeMaxAcceleration = Mathf.Abs(longitudinalAccel);
+        }
+        episodeAccelerationPenalty += (1.0f - accMultiplier);
+        
 
         // Final
-        //float combinedMultiplier = speedPenaltyMultiplier * dtcMultiplier * accMultiplier * smoothMultiplier;
-        //float finalReward = deltaProgress * normalization * combinedMultiplier;
-        //AddReward(finalReward);
+        decisionStepCounter++;
+        if (decisionStepCounter >= decisionPeriod)
+        {
+            float deltaPedals = Mathf.Abs(targetThrottle - lastThrottleInput) + Mathf.Abs(targetBrake - lastBrakeInput);
+            float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction);
+            float effectiveSteerThreshold = Mathf.Lerp(2.0f, inputSmoothnessThreshold * decisionPeriod, smoothnessProgression);
+            float steerMultiplier = CalculateCliffReward(deltaSteer, effectiveSteerThreshold, 2.0f);
+            float effectivePedalThreshold = Mathf.Lerp(2.0f, 0.04f * decisionPeriod, smoothnessProgression);
+            float pedalMultiplier = CalculateCliffReward(deltaPedals, effectivePedalThreshold, 2.0f);
+            smoothMultiplier = steerMultiplier * pedalMultiplier;
+            
+            lastThrottleInput = targetThrottle;
+            lastBrakeInput = targetBrake;
+            lastSteeringAction = targetSteer;
+            
+            episodeSmoothnessPenalty += (1.0f - smoothMultiplier);
+            decisionStepCounter = 0;
+        }
+            
+        float dynamicFloor = Mathf.Lerp(0.25f, 0.0f, weightRatio);
+        float dtcMultiplier = Mathf.Lerp(dynamicFloor, 1.0f, dtcScore);
+        float combinedMultiplier = speedScore * dtcMultiplier * smoothMultiplier * accMultiplier;
+        float stepReward;
+        if (baseAlignmentReward > 0f) {
+            stepReward = baseAlignmentReward * combinedMultiplier * 0.02f;
+        } else {
+            stepReward = baseAlignmentReward * 0.02f; 
+        }
+        
+        float targetedAccPenalty = (1.0f - accMultiplier) * 0.05f;
+        stepReward -= targetedAccPenalty;
+            
+        AddReward(stepReward);
 
 
         // Logging
@@ -574,9 +623,11 @@ public class DriveYourselfAgent : Agent
         stats.Add("Custom/Total Speed Penalty", episodeSpeedPenalty, StatAggregationMethod.Average);
         stats.Add("Custom/Total DtC Reward", episodeDtCReward, StatAggregationMethod.Average);
         stats.Add("Custom/Total Smoothness Penalty", episodeSmoothnessPenalty, StatAggregationMethod.Average);
+        stats.Add("Custom/Total Acceleration Penalty", episodeAccelerationPenalty, StatAggregationMethod.Average);
         stats.Add("Custom/Avg Speed Deviation", episodeSpeedDeviation / statsStepCount, StatAggregationMethod.Average);
         stats.Add("Custom/Avg DtC Deviation", episodeDtCDeviation / statsStepCount, StatAggregationMethod.Average);
         stats.Add("Custom/Avg Smoothness Penalty", (episodeSmoothnessPenalty * decisionPeriod) / statsStepCount, StatAggregationMethod.Average);
+        stats.Add("Custom/Avg Acceleration Penalty", episodeAccelerationPenalty / statsStepCount, StatAggregationMethod.Average);
         stats.Add("Custom/Max Acceleration", episodeMaxAcceleration, StatAggregationMethod.Average);
     }
 
