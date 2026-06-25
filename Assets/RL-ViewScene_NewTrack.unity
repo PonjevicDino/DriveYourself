@@ -2934,7 +2934,7 @@ MonoBehaviour:
     VectorActionDescriptions: []
     VectorActionSpaceType: 1
     hasUpgradedBrainParametersWithActionSpec: 1
-  m_Model: {fileID: 5022602860645237092, guid: f9cd0df7b5fef7240a152056d614a009, type: 3}
+  m_Model: {fileID: 5022602860645237092, guid: ed5b43761ba7e9f47861a947a890f1d2, type: 3}
   m_InferenceDevice: 0
   m_BehaviorType: 0
   m_BehaviorName: TestModel
@@ -2978,6 +2978,7 @@ MonoBehaviour:
   endEpisodeAfterCompletedLaps: 2147483647
   endEpisodeCarYPosition: -1
   endEpisodeCarStuckSeconds: 2147483647
+  boMode: 0
   startingPositionSidewaysOffset: 5
   startingRotationForEpisode: 20
   startingMaximumForwardSpeed: 0
@@ -3040,14 +3041,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rootFolder: Assets/RL/Models
-  runPrefix: Run02Short
+  runPrefix: Run002
   targetSpeed: 50
-  targetWeight: 0
+  targetDtC: 0
   targetAccelTime: 5
   targetSmoothness: 1
-  currentLoadedModel: Run02Short-Agent_0001-S050-W0-A5-Sm1
-  boActive: 0
-  boStartCommandGiven: 0
+  currentLoadedModel: Run002-Agent_0001-S050-W0-A5-Sm1
 --- !u!1001 &237686306
 PrefabInstance:
   m_ObjectHideFlags: 0

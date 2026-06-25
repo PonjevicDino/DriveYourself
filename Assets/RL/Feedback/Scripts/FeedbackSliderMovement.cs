@@ -19,7 +19,7 @@ public class FeedbackSliderMovement : MonoBehaviour
             slider.value += 0.01f;
             
             if (activeCoroutine != null) StopCoroutine(activeCoroutine);
-            activeCoroutine = StartCoroutine(PressAndHold(KeyCode.RightArrow, 3f, 0.001f));
+            activeCoroutine = StartCoroutine(PressAndHold(KeyCode.RightArrow, 0.5f, 0.0025f));
         }
         
         if (Input.GetKeyDown(KeyCode.LeftArrow))
@@ -27,7 +27,7 @@ public class FeedbackSliderMovement : MonoBehaviour
             slider.value -= 0.01f; 
             
             if (activeCoroutine != null) StopCoroutine(activeCoroutine);
-            activeCoroutine = StartCoroutine(PressAndHold(KeyCode.LeftArrow, 3f, -0.001f));
+            activeCoroutine = StartCoroutine(PressAndHold(KeyCode.LeftArrow, 0.5f, -0.0025f));
         }
     }
 

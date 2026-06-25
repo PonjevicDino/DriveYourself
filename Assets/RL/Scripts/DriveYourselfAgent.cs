@@ -77,6 +77,8 @@ public class DriveYourselfAgent : Agent
     private float smoothMultiplier;
     private int decisionPeriod = 5;
     private int decisionStepCounter;
+
+    [HideInInspector] public bool boMode = false;
     
     private Vector3 startingPositionForEpisode;
     [SerializeField, Min(0.0f)] private float startingPositionSidewaysOffset;
@@ -188,11 +190,11 @@ public class DriveYourselfAgent : Agent
         //this.transform.parent.Find("All Audio Sources").gameObject.SetActive(false);
         this.transform.parent.Find("All Contact Particles").gameObject.SetActive(false);
 
-        if (!this.GetComponent<AgentSelector>().boActive || this.GetComponent<AgentSelector>().boStartCommandGiven)
+        if (!boMode)
         {
             Spline spline = vehicleData.roadLayout.trackSpline.Spline;
             float randomT = UnityEngine.Random.Range(0f, 1f);
-            
+
             float3 localPos = SplineUtility.EvaluatePosition(spline, randomT);
             float3 localTangent = SplineUtility.EvaluateTangent(spline, randomT);
 
@@ -200,19 +202,24 @@ public class DriveYourselfAgent : Agent
             Vector3 worldPos = trackTransform.TransformPoint(localPos);
             Vector3 worldForward = trackTransform.TransformDirection(localTangent).normalized;
             Vector3 worldRight = Vector3.Cross(Vector3.up, worldForward).normalized;
-            
-            worldPos += worldRight * UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset);
+
+            worldPos += worldRight *
+                        UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset);
             worldPos += Vector3.up * 1.0f;
-            
+
             Quaternion rotation = Quaternion.LookRotation(worldForward, Vector3.up);
-            rotation *= Quaternion.Euler(0, UnityEngine.Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0);
+            rotation *= Quaternion.Euler(0,
+                UnityEngine.Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0);
 
             carController.transform.SetPositionAndRotation(worldPos, rotation);
 
             carRb.angularVelocity = Vector3.zero;
-            carRb.linearVelocity = (carController.transform.forward * UnityEngine.Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) + (carController.transform.right * UnityEngine.Random.Range(-startingMaximumSidewaysSpeed / 3.6f, startingMaximumSidewaysSpeed / 3.6f));
+            carRb.linearVelocity =
+                (carController.transform.forward * UnityEngine.Random.Range(0f, startingMaximumForwardSpeed / 3.6f)) +
+                (carController.transform.right * UnityEngine.Random.Range(-startingMaximumSidewaysSpeed / 3.6f,
+                    startingMaximumSidewaysSpeed / 3.6f));
         }
-        
+
         carController.externalController = true;
 #if UNITY_EDITOR || UNITY_STANDALONE_WIN
         if (!Application.isBatchMode)
@@ -571,16 +578,9 @@ public class DriveYourselfAgent : Agent
         {
             //AddReward(10.0f);
             InjectStats();
-            if (this.GetComponent<AgentSelector>().boActive)
-            {
-                this.GetComponent<AgentSelector>().IterationEnd();
-            }
-            else
-            {
-                Academy.Instance.StatsRecorder.Add("Custom/Episodes_Completed", 1.0f, StatAggregationMethod.Sum);
-                EndEpisode();
-                return;
-            }
+            Academy.Instance.StatsRecorder.Add("Custom/Episodes_Completed", 1.0f, StatAggregationMethod.Sum);
+            EndEpisode();
+            return;
         }
         if (ingameSecondsSinceStartup - timeAtLastSignificantMove > endEpisodeCarStuckSeconds)
         {

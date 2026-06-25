@@ -143,7 +143,7 @@ namespace BOforUnity
                 simulationRunning = true; // waiting for the simulation to finish
 
                 //GameObject.FindFirstObjectByType<DriveYourselfAgent>().GetComponent<DriveYourselfAgent>().OnEpisodeBegin();
-                GameObject.FindFirstObjectByType<AgentSelector>().GetComponent<AgentSelector>().boStartCommandGiven = true;
+                //GameObject.FindFirstObjectByType<AgentSelector>().GetComponent<AgentSelector>().boStartCommandGiven = true;
             }
             else if (currentIteration > totalIterations || isPerfect)
             {

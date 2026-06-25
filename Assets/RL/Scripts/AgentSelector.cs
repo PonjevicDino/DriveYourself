@@ -21,26 +21,20 @@ public class AgentSelector : MonoBehaviour
 
     [Header("Agent Parameters")]
     [UnityEngine.Range(50, 100)] public int targetSpeed = 50;
-    [UnityEngine.Range(0, 100)] public int targetWeight = 85;
+    [UnityEngine.Range(0, 100)] public int targetDtC = 85;
     [UnityEngine.Range(5, 15)] public int targetAccelTime = 10;
     [UnityEngine.Range(1, 9)] public int targetSmoothness = 5;
     private int oldTargetSpeed;
-    private int oldTargetWeight;
+    private int oldTargetDtC;
     private int oldTargetAccelTime;
     private int oldTargetSmoothness;
 
     [Header("Status")]
     [SerializeField] private string currentLoadedModel = "None";
-    [SerializeField] public bool boActive = false;
+    public string CurrentLoadedModel => currentLoadedModel;
 
     private BehaviorParameters behaviorParameters;
     private DriveYourselfAgent agent;
-
-    private BoForUnityManager boUnity;
-    private Dictionary<string, float> boValues;
-    [HideInInspector] public bool boStartCommandGiven = false;
-    private int origEndEpisodeCarStuckSeconds = 0;
-    private bool studyHasStarted = false;
 
     private ModelAsset[] availableModels;
     private string lastRunPrefix;
@@ -50,72 +44,28 @@ public class AgentSelector : MonoBehaviour
     private void OnEnable()
     {
         Initialize();
-        if (!boActive)
-        {
-            FindAndAssignModel();
-        }
+        FindAndAssignModel();
     }
 
     private void OnValidate()
     {
-        
         if (!this.enabled) return;
         Initialize();
-        if (!boActive) 
+
+        if (targetSpeed != oldTargetSpeed || targetDtC != oldTargetDtC ||
+            targetAccelTime != oldTargetAccelTime || targetSmoothness != oldTargetSmoothness)
         {
-            if (targetSpeed != oldTargetSpeed || targetWeight != oldTargetWeight ||
-                targetAccelTime != oldTargetAccelTime || targetSmoothness != oldTargetSmoothness)
-            {
-                oldTargetSpeed = targetSpeed;
-                oldTargetWeight = targetWeight;
-                oldTargetAccelTime = targetAccelTime;
-                oldTargetSmoothness = targetSmoothness;
-                FindAndAssignModel();
-            }
+            oldTargetSpeed = targetSpeed;
+            oldTargetDtC = targetDtC;
+            oldTargetAccelTime = targetAccelTime;
+            oldTargetSmoothness = targetSmoothness;
+            FindAndAssignModel();
         }
     }
 
     private void Start()
-    {
-        if (GameObject.Find("BOforUnityManager") != null)
-        {
-            boUnity = GameObject.Find("BOforUnityManager").GetComponent<BoForUnityManager>();
-        }
-
-        if (boUnity == null)
-        {
-            boActive = false;
-        }
-        else if (boValues == null)
-        {
-            boValues = new Dictionary<string, float>();
-            ReadValuesFromBO();
-            SetValuesFromBO();
-        }
-
-        if (boActive)
-        {
-            origEndEpisodeCarStuckSeconds = agent.endEpisodeCarStuckSeconds;
-            agent.endEpisodeCarStuckSeconds = int.MaxValue;
-            agent.transform.parent.GetComponent<Rigidbody>().isKinematic = true;
-        }
-        
+    {        
         SearchInModelDatabase();
-    }
-
-    private void Update()
-    {
-        if (boActive && boStartCommandGiven)
-        {
-            ReadValuesFromBO();
-            SetValuesFromBO();
-            boStartCommandGiven = false;
-        }
-
-        if (boActive)
-        {
-            CheckForFeedback();
-        }
     }
 
     private void Initialize()
@@ -125,6 +75,27 @@ public class AgentSelector : MonoBehaviour
 
         if (agent == null)
             agent = GetComponent<DriveYourselfAgent>();
+    }
+
+    public void SetValuesFromExternal(int extSpeed, int extDtC, int extAccel, int extSmoothness)
+    {
+        Initialize();
+        
+        targetSpeed = extSpeed;
+        targetDtC = extDtC;
+        targetAccelTime = extAccel;
+        targetSmoothness = extSmoothness;
+        targetSmoothness = extSmoothness;
+
+        if (targetSpeed != oldTargetSpeed || targetDtC != oldTargetDtC ||
+            targetAccelTime != oldTargetAccelTime || targetSmoothness != oldTargetSmoothness)
+        {
+            oldTargetSpeed = targetSpeed;
+            oldTargetDtC = targetDtC;
+            oldTargetAccelTime = targetAccelTime;
+            oldTargetSmoothness = targetSmoothness;
+            FindAndAssignModel();
+        }
     }
 
     public async void FindAndAssignModel()
@@ -151,13 +122,13 @@ public class AgentSelector : MonoBehaviour
         }
         
         int currentTargetSpeed = targetSpeed;
-        int currentTargetWeight = targetWeight;
+        int currentTargetDtC = targetDtC;
         int currentTargetAccelTime = targetAccelTime;
         int currentTargetSmoothness = targetSmoothness;
         
         int bestIndex = await Task.Run(() => 
         {
-            return GetBestModelIndex(modelNames, currentTargetSpeed, currentTargetWeight, currentTargetAccelTime, currentTargetSmoothness);
+            return GetBestModelIndex(modelNames, currentTargetSpeed, currentTargetDtC, currentTargetAccelTime, currentTargetSmoothness);
         });
         
         if (bestIndex != -1)
@@ -173,7 +144,7 @@ public class AgentSelector : MonoBehaviour
         }
     }
     
-    private int GetBestModelIndex(string[] names, int tSpeed, int tWeight, int tAccel, int tSmooth)
+    private int GetBestModelIndex(string[] names, int tSpeed, int tDtC, int tAccel, int tSmooth)
     {
         string pattern = @"Agent_(\d+)-S(\d+)-W(\d+)-A(\d+)-Sm(\d+)";
         Regex regex = new Regex(pattern);
@@ -188,16 +159,16 @@ public class AgentSelector : MonoBehaviour
             if (match.Success)
             {
                 int fileSpeed = int.Parse(match.Groups[2].Value);
-                int fileWeight = int.Parse(match.Groups[3].Value);
+                int fileDtC = int.Parse(match.Groups[3].Value);
                 int fileAcc = int.Parse(match.Groups[4].Value);
                 int fileSmooth = int.Parse(match.Groups[5].Value);
 
                 float dSpeed = (tSpeed - fileSpeed) / 100.0f;
-                float dWeight = (tWeight - fileWeight) / 100.0f;
+                float dDtC = (tDtC - fileDtC) / 100.0f;
                 float dAcc = (tAccel - fileAcc) / 20.0f;
                 float dSmooth = (tSmooth - fileSmooth) / 10.0f;
 
-                float dist = (dSpeed * dSpeed) + (dWeight * dWeight) + (dAcc * dAcc) + (dSmooth * dSmooth);
+                float dist = (dSpeed * dSpeed) + (dDtC * dDtC) + (dAcc * dAcc) + (dSmooth * dSmooth);
 
                 if (dist < minDistance)
                 {
@@ -217,11 +188,11 @@ public class AgentSelector : MonoBehaviour
         if(match.Success)
         {
             int fileSpeed = int.Parse(match.Groups[2].Value);
-            int fileWeight = int.Parse(match.Groups[3].Value);
+            int fileDtC = int.Parse(match.Groups[3].Value);
             int fileAcc = int.Parse(match.Groups[4].Value);
             int fileSmooth = int.Parse(match.Groups[5].Value);
             
-            SetModelRewardStats(fileSpeed, fileWeight, fileAcc, fileSmooth);
+            SetModelRewardStats(fileSpeed, fileDtC, fileAcc, fileSmooth);
         }
     }
 
@@ -230,10 +201,10 @@ public class AgentSelector : MonoBehaviour
         availableModels = Resources.LoadAll<ModelAsset>(resourcesPath);
     }
 
-    private void SetModelRewardStats(int fileSpeed, int fileWeight, int fileAcc, int fileSmooth)
+    private void SetModelRewardStats(int fileSpeed, int fileDtC, int fileAcc, int fileSmooth)
     {
         agent.targetSpeed = fileSpeed;
-        agent.DtCRewardPercent = fileWeight;
+        agent.DtCRewardPercent = fileDtC;
         agent.accelTime0to100 = fileAcc == 0 ? 10 : fileAcc; 
         
         float fullRange = 2.0f;
@@ -250,65 +221,11 @@ public class AgentSelector : MonoBehaviour
         }
     }
 
-    private void ReadValuesFromBO()
-    {
-        for (int parameterIdx = 0; parameterIdx < boUnity.parameters.Count; parameterIdx++)
-        {
-            var parameter = boUnity.parameters[parameterIdx];
-            //Debug.Log("Added Parameter to BO-List: " + parameter.key + " = " + parameter.value.Value);
-            boValues[parameter.key] = parameter.value.Value;
-        }
-    }
-
-    private void SetValuesFromBO()
-    {
-        targetSpeed = Mathf.RoundToInt(boValues["VehicleSpeed"]);
-        targetWeight = Mathf.RoundToInt(boValues["VehicleDistanceToCenter"]);
-        targetAccelTime = Mathf.RoundToInt(boValues["VehicleMaxAcceleration"]);
-        targetSmoothness = Mathf.RoundToInt(boValues["VehicleSmoothness"]);
-
-        agent.endEpisodeCarStuckSeconds = origEndEpisodeCarStuckSeconds;
-        agent.transform.parent.GetComponent<Rigidbody>().isKinematic = false;
-
-        FindAndAssignModel();
-    }
+    
 
     public void IterationEnd()
     {
         agent.endEpisodeCarStuckSeconds = int.MaxValue;
         agent.transform.parent.GetComponent<Rigidbody>().isKinematic = true;
-    }
-
-    private void CheckForFeedback()
-    {
-        int trust = 0;
-        bool buttonPressed = false;
-
-        if (Input.GetKeyDown(KeyCode.KeypadPlus))
-        {
-            trust = 5;
-            Debug.Log("User trusts the agent!");
-            buttonPressed = true;
-        }
-        if (Input.GetKeyDown(KeyCode.KeypadMinus))
-        {
-            trust = 1;
-            Debug.Log("User does not trust the agent!");
-            buttonPressed = true;
-        }
-
-        if (buttonPressed)
-        {
-            GameObject.FindFirstObjectByType<BoForUnityManager>().optimizer.AddObjectiveValue("Trust", trust);
-            GameObject.FindFirstObjectByType<BoForUnityManager>().optimizer.AddObjectiveValue("Comfort", 3);
-
-            GameObject.FindFirstObjectByType<BoForUnityManager>().OptimizationStart();
-        }
-
-        if (Input.GetKey(KeyCode.Space) && !studyHasStarted)
-        {
-            studyHasStarted = true;
-            GameObject.FindFirstObjectByType<BoForUnityManager>().ButtonNextIteration();
-        }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -14,6 +15,33 @@ public class FeedbackButtonSelector : MonoBehaviour
     private int selectedAcc = 0;
     private int selectedSmoothness = 0;
     
+    public int SelectedSpeed => selectedSpeed;
+    public int SelectedDtC => selectedDtC;
+    public int SelectedAcc => selectedAcc;
+    public int SelectedSmoothness => selectedSmoothness;
+
+    public void Reset()
+    {
+        selectedSpeed = 0;
+        selectedDtC = 0;
+        selectedAcc = 0;
+        selectedSmoothness = 0;
+        
+        ClearButtonColors(speedButtons);
+        ClearButtonColors(dtcButtons);
+        ClearButtonColors(accButtons);
+        ClearButtonColors(smoothButtons);
+    }
+
+    private void ClearButtonColors(List<GameObject> targetList)
+    {
+        if (targetList == null) return;
+        foreach (GameObject button in targetList)
+        {
+            button.GetComponent<Image>().color = Color.white;
+        }
+    }
+
     public void SelectSpeedMuchLess() => RadioButtonSelector("speed", -2);
     public void SelectSpeedSlightlyLess() => RadioButtonSelector("speed", -1);
     public void SelectSpeedKeep() => RadioButtonSelector("speed", 0);
@@ -76,7 +104,7 @@ public class FeedbackButtonSelector : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning($"Button index {index} is missing in the {type} list. Are 5 buttons assigned in the Inspector?");
+            Debug.LogWarning($"Button index {index} is missing in the {type} list. All 5 buttons assigned in the Inspector?");
         }
     }
 }

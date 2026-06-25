@@ -263,7 +263,7 @@ public class OpenLabDayHandler : MonoBehaviour
     private void UpdateAgentDtC()
     {
         int sliderTargetDtC = Mathf.RoundToInt(Mathf.Lerp(0.0f, 100.0f, dtcSlider.value));
-        agentSelector.targetWeight = sliderTargetDtC;
+        agentSelector.targetDtC = sliderTargetDtC;
         agentSelector.FindAndAssignModel();
     }
     
