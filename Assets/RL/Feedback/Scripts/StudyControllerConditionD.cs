@@ -24,6 +24,7 @@ public class StudyControllerConditionD : MonoBehaviour
     [SerializeField] private GameObject processingStep;
     [SerializeField] private GameObject doneStep;
     [SerializeField] private GameObject errorText;
+    [SerializeField] private StudyControllerMicHandler micHandler;
     
     private DictationRecognizer dictationRecognizer;
     private string finalTranscription = "";
@@ -31,10 +32,7 @@ public class StudyControllerConditionD : MonoBehaviour
     
     private bool isRecording = false;
     private bool isProcessing = false;
-
-    private AudioClip currentAudioClip;
-    private int retryCounter = 1;
-    private List<string> audioPaths = new List<string>();
+    
     private float silenceTimer = 0f;
     private const float pauseThreshold = 1.5f;
 
@@ -141,10 +139,7 @@ public class StudyControllerConditionD : MonoBehaviour
         doneStep.SetActive(false);
         errorText.SetActive(false);
 
-        if (Microphone.devices.Length > 0)
-        {
-            currentAudioClip = Microphone.Start(null, false, 120, 44100);
-        }
+        micHandler.StartRecording();
         
         try
         {
@@ -176,22 +171,7 @@ public class StudyControllerConditionD : MonoBehaviour
             dictationRecognizer.Stop();
         }
         
-        if (Microphone.devices.Length > 0 && Microphone.IsRecording(null))
-        {
-            int position = Microphone.GetPosition(null);
-            Microphone.End(null);
-            
-            AudioClip trimmedClip = AudioClip.Create("Trimmed", position, 1, 44100, false);
-            float[] data = new float[position];
-            currentAudioClip.GetData(data, 0);
-            trimmedClip.SetData(data, 0);
-            
-            string savedPath = studyController.studyDataHandler.SaveAudioAttempt(
-                studyController.participantID, "D", (int)studyController.demoBoManager.ReturnIterations()[0], retryCounter, trimmedClip);
-    
-            audioPaths.Add(savedPath);
-            retryCounter++;
-        }
+        micHandler.StopRecording("D");
 
         processingStep.SetActive(true); 
         string textToSend = (finalTranscription + " " + currentHypothesis).Trim();
@@ -337,7 +317,7 @@ public class StudyControllerConditionD : MonoBehaviour
             smoothAdjustment = StringToEnum(mappedData.smoothness)
         };
 
-        studyController.SubmitFeedback(feedback, finalTranscription, new List<string>(audioPaths));
+        studyController.SubmitFeedback(feedback, finalTranscription, micHandler.GetAudioPaths());
 
         if (EventSystem.current != null)
         {
@@ -349,7 +329,7 @@ public class StudyControllerConditionD : MonoBehaviour
         liveTranscriptionText.text = "\\\\\\\n\\\\\\\nYour input will be visible here\n\\\\\\\n\\\\\\";
         isProcessing = false;
         
-        audioPaths.Clear();
+        micHandler.ResetForNextRound();
         finalTranscription = "";
         currentHypothesis = "";
     }

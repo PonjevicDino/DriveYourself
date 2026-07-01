@@ -25,6 +25,7 @@ public class StudyControllerConditionC : MonoBehaviour
     [SerializeField] private GameObject processingStep;
     [SerializeField] private GameObject doneStep;
     [SerializeField] private GameObject errorText;
+    [SerializeField] private StudyControllerMicHandler micHandler;
     
     private DictationRecognizer dictationRecognizer;
     private string finalTranscription = "";
@@ -33,9 +34,6 @@ public class StudyControllerConditionC : MonoBehaviour
     private bool isRecording = false;
     private bool isProcessing = false;
     
-    private AudioClip currentAudioClip;
-    private int retryCounter = 1;
-    private List<string> audioPaths = new List<string>();
     private float silenceTimer = 0f;
     private const float pauseThreshold = 1.5f;
     
@@ -137,10 +135,7 @@ public class StudyControllerConditionC : MonoBehaviour
         doneStep.SetActive(false);
         errorText.SetActive(false);
 
-        if (Microphone.devices.Length > 0)
-        {
-            currentAudioClip = Microphone.Start(null, false, 120, 44100);
-        }
+        micHandler.StartRecording();
         
         try
         {
@@ -172,22 +167,7 @@ public class StudyControllerConditionC : MonoBehaviour
             dictationRecognizer.Stop();
         }
         
-        if (Microphone.devices.Length > 0 && Microphone.IsRecording(null))
-        {
-            int position = Microphone.GetPosition(null);
-            Microphone.End(null);
-            
-            AudioClip trimmedClip = AudioClip.Create("Trimmed", position, 1, 44100, false);
-            float[] data = new float[position];
-            currentAudioClip.GetData(data, 0);
-            trimmedClip.SetData(data, 0);
-            
-            string savedPath = studyController.studyDataHandler.SaveAudioAttempt(
-                studyController.participantID, "C", (int)studyController.demoBoManager.ReturnIterations()[0], retryCounter, trimmedClip);
-    
-            audioPaths.Add(savedPath);
-            retryCounter++;
-        }
+        micHandler.StopRecording("C");
 
         processingStep.SetActive(true); 
         string textToSend = (finalTranscription + " " + currentHypothesis).Trim();
@@ -229,7 +209,7 @@ public class StudyControllerConditionC : MonoBehaviour
 
     private IEnumerator SendToGemini(string userText)
     {
-        string systemPrompt = "You are an intent parser for an autonomous driving simulator. Extract the user's desired changes for 4 parameters: 'speed', 'distance to the center', 'acceleration', and 'smoothness'. Map their intent strictly to one of these exact values: 'much less', 'slightly less', 'keep', 'slightly more', 'much more'. If a parameter isn't mentioned, default to 'keep'. If the text is completely unrelated or unintelligible, set 'isValid' to false. Reply ONLY with a JSON object matching this structure: {\"isValid\": true, \"speed\": \"keep\", \"dtc\": \"keep\", \"acceleration\": \"keep\", \"smoothness\": \"keep\"}";
+        string systemPrompt = "You are an intent parser for an autonomous driving simulator. Extract the user's desired changes for 4 parameters: 'speed', 'distance to the center', 'acceleration', and 'smoothness'. Map their intent strictly to one of these exact values: 'much less', 'slightly less', 'keep', 'slightly more', 'much more'. If a parameter isn't mentioned, default to 'keep'. Additionally, deduce a 'likenessScore' as a float between 0.0 and 1.0 indicating how much the user liked the previous driving style based on their sentiment (e.g., highly critical/frustrated = 0.0-0.3, neutral/mixed = 0.4-0.6, highly positive = 0.7-1.0). If unsure, default to 0.5. If the text is completely unrelated or unintelligible, set 'isValid' to false. Reply ONLY with a JSON object matching this structure: {\"isValid\": true, \"likenessScore\": 0.5, \"speed\": \"keep\", \"dtc\": \"keep\", \"acceleration\": \"keep\", \"smoothness\": \"keep\"}";
 
         string combinedPrompt = $"{systemPrompt}\n\nUser Input: {userText}";
         combinedPrompt = combinedPrompt.Replace("\"", "\\\"");
@@ -325,13 +305,14 @@ public class StudyControllerConditionC : MonoBehaviour
         StudyController.AgentFeedback feedback = new StudyController.AgentFeedback
         {
             likenessScore = feedbackSlider.value,
+            llmLikenessScore = mappedData.likenessScore, 
             speedAdjustment = StringToEnum(mappedData.speed),
             dtcAdjustment = StringToEnum(mappedData.dtc),
             accelAdjustment = StringToEnum(mappedData.acceleration),
             smoothAdjustment = StringToEnum(mappedData.smoothness)
         };
 
-        studyController.SubmitFeedback(feedback, finalTranscription, new List<string>(audioPaths));
+        studyController.SubmitFeedback(feedback, finalTranscription, micHandler.GetAudioPaths());
 
         if (EventSystem.current != null)
         {
@@ -345,7 +326,7 @@ public class StudyControllerConditionC : MonoBehaviour
         
         isProcessing = false;
         
-        audioPaths.Clear();
+        micHandler.ResetForNextRound();
         finalTranscription = "";
         currentHypothesis = "";
     }
@@ -370,6 +351,7 @@ public class StudyControllerConditionC : MonoBehaviour
     public class MappedFeedback
     {
         public bool isValid;
+        public float likenessScore;
         public string speed;
         public string dtc;
         public string acceleration;

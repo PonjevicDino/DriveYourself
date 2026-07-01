@@ -66,6 +66,7 @@ public class StudyController : MonoBehaviour
     public struct AgentFeedback 
     {
         public float likenessScore;
+        public float llmLikenessScore;
         public ParameterAdjustment speedAdjustment;
         public ParameterAdjustment dtcAdjustment;
         public ParameterAdjustment accelAdjustment;
@@ -110,7 +111,7 @@ public class StudyController : MonoBehaviour
         
         llmSetup.SetActive(false);
         ValidateLLMKey();
-        ValidateMic();
+        StartCoroutine(ValidateMicCoroutine());
         
         startingPosition.GetChild(0).gameObject.SetActive(false);
     }
@@ -168,8 +169,10 @@ public class StudyController : MonoBehaviour
         }
     }
     
-    private void ValidateMic()
+    private IEnumerator ValidateMicCoroutine()
     {
+        yield return new WaitForSeconds(0.5f);
+
         if (Microphone.devices.Length == 0)
         {
             if (micError != null) micError.SetActive(true);
@@ -178,6 +181,7 @@ public class StudyController : MonoBehaviour
         else
         {
             if (micError != null) micError.SetActive(false);
+            Debug.Log($"Microphone found: {Microphone.devices[0]}");
         }
     }
     

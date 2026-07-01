@@ -96,6 +96,7 @@ public class StudyDataHandler : MonoBehaviour
             smoothValue = agentParams[3],
 
             likenessScore = feedback.likenessScore,
+            llmLikenessScore = feedback.llmLikenessScore,
             
             speedAdjustment = (int)feedback.speedAdjustment,
             dtcAdjustment = (int)feedback.dtcAdjustment,
@@ -178,6 +179,7 @@ public class RoundData
 
     [Header("User Feedback")]
     public float likenessScore;
+    public float llmLikenessScore;
     public int speedAdjustment;
     public int dtcAdjustment;
     public int accAdjustment;
