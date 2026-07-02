@@ -43,7 +43,7 @@ public class DriveYourselfAgent : Agent
     [SerializeField] private TextMeshProUGUI agentDtCText;
 
     [Header("Rewards")]
-    [SerializeField, Range(50.0f, 100.0f)] public float targetSpeed;
+    [SerializeField, Range(50.0f, 112.5f)] public float targetSpeed;
     //[SerializeField, Min(0f)] private float maxAllowedSafeAcc;
     //[SerializeField, Min(0f)] private float maxAllowedRewardAcc;
     //[SerializeField, Range(0.0f,100.0f)] private float accRewardPercent;
@@ -85,11 +85,6 @@ public class DriveYourselfAgent : Agent
     [SerializeField, Range(0.0f, 180.0f)] private float startingRotationForEpisode;
     [SerializeField, Min(0.0f)] private float startingMaximumForwardSpeed;
     [SerializeField, Min(0.0f)] private float startingMaximumSidewaysSpeed;
-    private enum StartingAxis
-    {
-        X,
-        Z
-    }
 
     void Start()
     {
@@ -203,13 +198,11 @@ public class DriveYourselfAgent : Agent
             Vector3 worldForward = trackTransform.TransformDirection(localTangent).normalized;
             Vector3 worldRight = Vector3.Cross(Vector3.up, worldForward).normalized;
 
-            worldPos += worldRight *
-                        UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset);
+            worldPos += worldRight * UnityEngine.Random.Range(-startingPositionSidewaysOffset, startingPositionSidewaysOffset);
             worldPos += Vector3.up * 1.0f;
 
             Quaternion rotation = Quaternion.LookRotation(worldForward, Vector3.up);
-            rotation *= Quaternion.Euler(0,
-                UnityEngine.Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0);
+            rotation *= Quaternion.Euler(0, UnityEngine.Random.Range(-startingRotationForEpisode, startingRotationForEpisode), 0);
 
             carController.transform.SetPositionAndRotation(worldPos, rotation);
 
@@ -234,9 +227,6 @@ public class DriveYourselfAgent : Agent
         vehicleData.ResetVars();
         carController.canGoReverseNow = false;
         carController.currentGear = 0;
-        //carController.GetComponent<Rigidbody>().isKinematic = true;
-        //carController.engineRunning = false; 
-        //carController.engineRPMRaw = 0;
 
         lastLap = 1;
         lastLapProgress = 0.0f;
@@ -246,22 +236,11 @@ public class DriveYourselfAgent : Agent
         decisionStepCounter = 0;
 
         smoothMultiplier = 1.0f;
-
-        //StartCoroutine(UnfreezeMovement());
+        
         vehicleData.SyncDiscreteSegmentToSpline();
         vehicleData.InitContinuousSplineState();
     }
-
-    private IEnumerator UnfreezeMovement()
-    {
-        while (ingameSecondsSinceStartup < 0.5)
-        {
-            yield return new WaitForFixedUpdate();
-        }
-        carController.GetComponent<Rigidbody>().isKinematic = false;
-        carController.engineRunning = true;
-    }
-
+    
     public override void Heuristic(in ActionBuffers actionsOut)
     {
         var actions = actionsOut.ContinuousActions;
@@ -299,20 +278,6 @@ public class DriveYourselfAgent : Agent
         Vector3 localVelocity = carController.transform.InverseTransformDirection(carRb.linearVelocity);
         sensor.AddObservation(localVelocity.x / 10.0f);
         sensor.AddObservation(localVelocity.z / 27.78f); // 27.78 m/s = 100 km/h
-
-        // GameObject currentSegment = vehicleData.GetRoadSegment();
-        // switch (currentSegment.name.Split("_")[1])
-        // {
-        //     case "Left":
-        //         sensor.AddObservation(-1);
-        //         break;
-        //     case "Right":
-        //         sensor.AddObservation(1);
-        //         break;
-        //     default:
-        //         sensor.AddObservation(0);
-        //         break;
-        // }
 
         float currentT = vehicleData.GetCurrentSplineT();
         Spline spline = vehicleData.roadLayout.trackSpline.Spline;
@@ -354,10 +319,6 @@ public class DriveYourselfAgent : Agent
             return;
         }
 
-        //float updateDiff = Time.fixedDeltaTime;
-        //float currentAccPerSecond = vehicleData.GetAccelleration() / updateDiff;
-        //float currentAccOffset = Mathf.Abs(currentAccPerSecond) - maxAllowedSafeAcc;
-
         // Move and Steer
         float rawForwardAction = actions.ContinuousActions[0];
         if (rawForwardAction > 0.01f)
@@ -381,14 +342,6 @@ public class DriveYourselfAgent : Agent
         // Time penalty
         //AddReward(-0.01f);
 
-        // Engine Inertia
-        /*
-        if (carController.engineRPM > 800.0f * 2.0f)
-        {
-            AddReward(0.001f);
-        }
-        */
-
         // Input Text
         agentAccText.text = "Acc: " + targetThrottle.ToString("F4");
         agentBrkText.text = "Brk: " + targetBrake.ToString("F4");
@@ -408,7 +361,6 @@ public class DriveYourselfAgent : Agent
         Vector3 carVelocity = carRb.linearVelocity;
             
         // Progress (Always rewarded)
-        //float normalization = 100.0f / Mathf.Max(targetSpeed, 10.0f);
         float velocityAlongPath = Vector3.Dot(carVelocity, trackForward);
         float targetSpeedMs = targetSpeed / 3.6f;
         float baseAlignmentReward = Mathf.Clamp(velocityAlongPath / targetSpeedMs, -1.0f, 1.0f);

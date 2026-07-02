@@ -22,6 +22,7 @@ namespace BOforUnity
         // DESIGN PARAMETERS and DESIGN OBJECTIVES
         public List<ParameterEntry> parameters = new List<ParameterEntry>();
         public List<ObjectiveEntry> objectives = new List<ObjectiveEntry>();
+        public Dictionary<string, int> currentAdjustments = new Dictionary<string, int>();
         //-----------------------------------------------
         
         //-----------------------------------------------

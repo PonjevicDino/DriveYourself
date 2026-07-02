@@ -7,7 +7,7 @@ def generate_agents(prefix, matrix):
     agents = []
 
     # Defined Ranges
-    min_speed, max_speed = 50, 100
+    min_speed, max_speed = 50, 112.5
     min_dtc, max_dtc = 0, 100
     min_smooth, max_smooth = 1, 9
     min_acc, max_acc = 5, 15
@@ -93,7 +93,7 @@ if __name__ == "__main__":
         type=int,
         nargs=4,
         metavar=('SPEEDS', 'DTC', 'SMOOTH', 'ACC'),
-        default=[5, 3, 3, 3],
+        default=[6, 5, 3, 3],
         help="Provide 4 numbers separated by spaces for the matrix (Speed, DtC, Smoothness, Accel)",
     )
 

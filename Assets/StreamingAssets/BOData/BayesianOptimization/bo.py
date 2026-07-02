@@ -2,15 +2,19 @@
 # Uses qLogNoisyExpectedImprovement. Keeps existing files except:
 # ObservationsPerEvaluation.csv now uses 'IsBest' (no 'IsPareto').
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import json
 import socket
 import time
 import csv
-import os
 import numpy as np
 import pandas as pd
 import torch
 
+from botorch.acquisition import AcquisitionFunction
 from botorch.acquisition.logei import qLogNoisyExpectedImprovement  # LogNEI
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_mll
@@ -18,6 +22,21 @@ from botorch.optim.optimize import optimize_acqf
 from botorch.sampling.normal import SobolQMCNormalSampler
 from botorch.utils.sampling import draw_sobol_samples
 from gpytorch.mlls import ExactMarginalLogLikelihood
+
+from parameter_priors import ParameterSpace, ParameterPrior
+
+class PriorWeightedAcquisition(AcquisitionFunction):
+    def __init__(self, base_acq: AcquisitionFunction, priors: list[ParameterPrior]) -> None:
+        super().__init__(model=base_acq.model)
+        self.base_acq = base_acq
+        self.priors = priors
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        val = self.base_acq(X)
+        for p in self.priors:
+            val = val + p.log_weight(X)
+        return val
+
 
 # -------------------- defaults (overwritten by Unity init) --------------------
 N_INITIAL = 5
@@ -33,6 +52,8 @@ NUM_OBJS = None  # must be 1
 
 # derived at init
 problem_bounds = None
+param_space = None
+active_priors = []
 
 # paths/state
 PROJECT_PATH = ""
@@ -147,12 +168,44 @@ def parse_obj_init(init_val):
         raise ValueError(f"Objective init parse error: '{init_val}'")
     return float(parts[0]), float(parts[1]), int(float(parts[2]))
 
+
+# -------------------- Preference Update Logic --------------------
+def update_priors(x_tensor, adjs):
+    global active_priors, param_space
+    if not adjs:
+        return
+
+    x_np = x_tensor.cpu().numpy()
+    new_priors = []
+
+    for i, name in enumerate(parameter_names):
+        if name in adjs:
+            adj = int(adjs[name])
+            lo, hi = parameters_info[i]
+            x_val = denormalize_to_original_param(x_np[i], lo, hi)
+            span = hi - lo
+
+            if adj <= -2:  # Much Less
+                new_priors.append(param_space.soft_bound(name, low=lo, high=max(lo, x_val - 0.1 * span)))
+            elif adj == -1:  # Slightly Less
+                new_priors.append(param_space.soft_bound(name, low=lo, high=x_val))
+            elif adj == 0:  # Keep
+                new_priors.append(param_space.gaussian(name, mean=x_val, std=span * 0.05))
+            elif adj == 1:  # Slightly More
+                new_priors.append(param_space.soft_bound(name, low=x_val, high=hi))
+            elif adj >= 2:  # Much More
+                new_priors.append(param_space.soft_bound(name, low=min(hi, x_val + 0.1 * span), high=hi))
+
+    active_priors = new_priors
+    print(f"-> Updated {len(active_priors)} preference priors based on user feedback.", flush=True)
+
+
 # -------------------- objective evaluation --------------------
 def recv_objectives_blocking(conn):
     for msg in ndjson_reader(conn):
         t = msg.get("type")
         if t == "objectives":
-            return msg.get("values") or {}
+            return msg.get("values") or {}, msg.get("adjustments") or {}
         elif t in ("coverage", "tempCoverage", "optimization_finished"):
             continue
         elif t == "log":
@@ -169,19 +222,19 @@ def objective_function(conn, x_tensor):
     print("Send parameters:", payload, flush=True)
     send_json_line(conn, payload)
 
-    resp = recv_objectives_blocking(conn)
-    if resp is None:
+    resp_obj, resp_adjs = recv_objectives_blocking(conn)
+    if resp_obj is None:
         raise RuntimeError("No objectives received from Unity.")
 
     # normalize to [-1,1] and maximize
     name = objective_names[0]
-    val = float(resp.get(name, 0.0))
+    val = float(resp_obj.get(name, 0.0))
     lo, hi, minflag = objectives_info[0]
     f = 0.0 if hi == lo else (val - lo) / (hi - lo) * 2 - 1
     if int(minflag) == 1:
         f *= -1
     f = max(-1.0, min(1.0, f))
-    return torch.tensor([f], dtype=torch.double)
+    return torch.tensor([f], dtype=torch.double), resp_adjs
 
 # -------------------- data IO --------------------
 def generate_initial_data(conn, n_samples):
@@ -199,10 +252,11 @@ def generate_initial_data(conn, n_samples):
     train_obj = []
     best_so_far = -1e9
     for i, x in enumerate(train_x):
-        print(f"---- Initial Sample {i+1}", flush=True)
-        y = objective_function(conn, x)  # shape [1]
+        print(f"---- Initial Sample {i + 1}", flush=True)
+        y, adjs = objective_function(conn, x)  # Extract both
         train_obj.append(y)
 
+        update_priors(x, adjs)
         x_np = x.cpu().numpy()
         y_np = y.cpu().numpy()  # normalized [-1,1]
         # denormalize objective back to original scale for logging
@@ -242,12 +296,13 @@ def optimize_candidates(model, sampler):
     X_baseline = model.train_inputs[0]
     if X_baseline.dim() == 3:
         X_baseline = X_baseline[0]
-    acq = qLogNoisyExpectedImprovement(
+    base_acq = qLogNoisyExpectedImprovement(
         model=model,
         X_baseline=X_baseline,
         sampler=sampler,
         # tau=1e-3,  # optional smoothing
     )
+    acq = PriorWeightedAcquisition(base_acq, active_priors) if active_priors else base_acq
     candidates, _ = optimize_acqf(
         acq_function=acq,
         bounds=problem_bounds,
@@ -342,9 +397,10 @@ def bo_execute(conn, seed, iterations, initial_samples):
         write_data_to_csv(exec_csv, ['Optimization', 'Execution_Time'],
                           [{'Optimization': it, 'Execution_Time': t_elapsed}])
 
-        new_y = objective_function(conn, new_x[0])  # shape [1]
+        new_y, new_adjs = objective_function(conn, new_x[0])
         train_x = torch.cat([train_x, new_x])
         train_y = torch.cat([train_y, new_y.unsqueeze(0)])  # shape [n+1,1]
+        update_priors(new_x[0], new_adjs)
 
         best = torch.max(train_y).item()
         metric_values.append(best)
@@ -364,6 +420,7 @@ def main():
     global WARM_START, CSV_PATH_PARAMETERS, CSV_PATH_OBJECTIVES
     global USER_ID, CONDITION_ID, GROUP_ID
     global parameter_names, objective_names, parameters_info, objectives_info
+    global param_space
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((HOST, PORT))
@@ -424,6 +481,11 @@ def main():
          torch.ones (PROBLEM_DIM, dtype=torch.double)],
         dim=0
     )
+
+    param_space = ParameterSpace([
+        (parameter_names[i], parameters_info[i][0], parameters_info[i][1])
+        for i in range(PROBLEM_DIM)
+    ])
 
     print("Init OK:", dict(
         BATCH_SIZE=BATCH_SIZE, NUM_RESTARTS=NUM_RESTARTS, RAW_SAMPLES=RAW_SAMPLES,

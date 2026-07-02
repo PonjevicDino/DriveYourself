@@ -12,21 +12,6 @@ namespace BOforUnity.Editor
     [CustomEditor(typeof(BoForUnityManager))]
     public class BoForUnityManagerEditor : UnityEditor.Editor
     {
-        private string originalUploadURL;
-        private string originalGroupName;
-        private string originalDownloadURLGroup;
-        private string originalLongitudinalName;
-        private string originalDownloadURLLongitudinal;
-        private string originalLockFileName;
-        private string originalDownloadURLLock;
-
-        private SerializedProperty outputTextProp;
-        private SerializedProperty loadingObjProp;
-        private SerializedProperty nextButtonProp;
-        //private SerializedProperty endSimProp;
-        private SerializedProperty welcomePanelProp;
-        private SerializedProperty optimizerStatePanelProp;
-        
         private SerializedProperty nSamplingIterProp;
         private SerializedProperty nOptimizationIterProp;
 
@@ -71,13 +56,6 @@ namespace BOforUnity.Editor
             objectiveList.drawElementCallback = DrawObjectiveListItems;
             objectiveList.elementHeightCallback = GetObjectiveElementHeight;
             
-            outputTextProp = serializedObject.FindProperty("outputText");
-            loadingObjProp = serializedObject.FindProperty("loadingObj");
-            nextButtonProp = serializedObject.FindProperty("nextButton");
-            welcomePanelProp = serializedObject.FindProperty("welcomePanel");
-            optimizerStatePanelProp = serializedObject.FindProperty("optimizerStatePanel");
-            //endSimProp = serializedObject.FindProperty("endOfSimulation");
-            
             nSamplingIterProp = serializedObject.FindProperty("numSamplingIterations");
             nOptimizationIterProp = serializedObject.FindProperty("numOptimizationIterations");
             
@@ -101,7 +79,7 @@ namespace BOforUnity.Editor
             initDataPath = Path.Combine(Application.dataPath, "StreamingAssets", "BOData", "InitData");
 
             enableSamplingEditProp = serializedObject.FindProperty("enableSamplingEdit");
-    }
+        }
 
         public override void OnInspectorGUI()
         {
@@ -255,52 +233,6 @@ namespace BOforUnity.Editor
                 "Samples for Monte Carlo acquisition estimates."));
             EditorGUILayout.PropertyField(seedProp,          new GUIContent("Random Seed",
                 "Seed for reproducibility."));
-
-            // ── GameObject References ───────────────────────────────────────────────
-            EditorGUILayout.Space();
-            GUILayout.Box(GUIContent.none, GUILayout.ExpandWidth(true), GUILayout.Height(3));
-            EditorGUILayout.LabelField("GameObject References", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(outputTextProp);
-            EditorGUILayout.PropertyField(loadingObjProp);
-            EditorGUILayout.PropertyField(nextButtonProp);
-            EditorGUILayout.PropertyField(welcomePanelProp);
-            EditorGUILayout.PropertyField(optimizerStatePanelProp);
-        }
-
-        /*
-        private void DrawServerClientConnectionSettings(BoForUnityManager script)
-        {
-            EditorGUILayout.LabelField("Server Client Connection for LogFiles", EditorStyles.boldLabel);
-            script.setServerClientCommunication(EditorGUILayout.Toggle("Server", script.getServerClientCommunication()));
-            EditorGUILayout.Space();
-            
-            if (!script.getServerClientCommunication())
-            {
-                EditorGUILayout.LabelField("Attention! If the server is not used, make sure to select GroupID and LongitudinalID in the Object Parameter Controller before starting.", EditorStyles.helpBox);
-            }
-            else
-            {
-                script.setUploadURL(EditorGUILayout.TextField("Upload URL:", originalUploadURL));
-                script.setGroupDatabaseName(EditorGUILayout.TextField("File Name GroupID Database:", originalGroupName));
-                script.setDownloadURLGroupID(EditorGUILayout.TextField("Download URL GroupID:", originalDownloadURLGroup));
-                script.setLongitudinalDatabaseName(EditorGUILayout.TextField("File Name LongitudinalID Database:", originalLongitudinalName));
-                script.setDownloadURLLongitudinalID(EditorGUILayout.TextField("Download URL LongitudinalID:", originalDownloadURLLongitudinal));
-                script.setLockFileName(EditorGUILayout.TextField("File Name LockFile:", originalLockFileName));
-                script.setLockFileUrl(EditorGUILayout.TextField("Download URL Lock File:", originalDownloadURLLock));
-            }
-        }
-        */
-        private void BackupServerClientCommunicationValues(BoForUnityManager script)
-        {
-            /*
-            originalUploadURL = script.getUploadURL();
-            originalGroupName = script.getGroupDatabaseName();
-            originalDownloadURLGroup = script.getDownloadURLGroupID();
-            originalLongitudinalName = script.getLongitudinalDatabaseName();
-            originalDownloadURLLongitudinal = script.getDownloadURLLongitudinalID();
-            originalLockFileName = script.getLockFileName();
-            originalDownloadURLLock = script.getLockFileUrl();
-            */
         }
 
         private void DrawParameterListItems(Rect rect, int index, bool isActive, bool isFocused)
@@ -342,8 +274,6 @@ namespace BOforUnity.Editor
             }
         }
 
-
-
         private float GetParameterListItemHeight(int index)
         {
             SerializedProperty element = parameterList.serializedProperty.GetArrayElementAtIndex(index);
@@ -359,8 +289,6 @@ namespace BOforUnity.Editor
 
             return totalHeight;
         }
-
-
 
         private void DrawObjectiveListItems(Rect rect, int index, bool isActive, bool isFocused)
         {

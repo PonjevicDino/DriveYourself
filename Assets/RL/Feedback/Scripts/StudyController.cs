@@ -13,8 +13,13 @@ public class StudyController : MonoBehaviour
     [HideInInspector] public StudyDataHandler studyDataHandler;
     [HideInInspector] public String participantID = String.Empty;
     [SerializeField] private TMP_InputField participantIDInput;
-    [SerializeField] private TMP_InputField apiKeyInput;
-    [SerializeField] public string geminiApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=";
+    
+    [Header("LLM Configuration")]
+    [SerializeField] private TMP_Dropdown llmProviderDropdown;
+    [SerializeField] private TMP_InputField geminiApiKeyInput;
+    [SerializeField] private TMP_InputField openAiApiKeyInput;
+    public enum LLMProvider { Gemini = 0, OpenAI = 1 }
+    public LLMProvider ActiveLLM => (LLMProvider)llmProviderDropdown.value;
     
     [Header("Windows")]
     [SerializeField] private GameObject startupWindow;
@@ -44,8 +49,8 @@ public class StudyController : MonoBehaviour
     [SerializeField] private GetVehicleData vehicleData;
 
     [Header("Bayesian Optimization")]
-    [SerializeField] public DemoBO demoBoManager;
-    // [SerializeField] private BoForUnityManager boManager;
+    //[SerializeField] public DemoBO demoBoManager;
+    [SerializeField] public BoForUnityManager boManager;
 
     private int currentSpeed;
     private int currentDistanceToCenter;
@@ -103,11 +108,20 @@ public class StudyController : MonoBehaviour
         conditionBWindow.SetActive(false);
         conditionCWindow.SetActive(false);
         conditionDWindow.SetActive(false);
-        
+
         if (PlayerPrefs.HasKey("GeminiAPIKey"))
         {
-            apiKeyInput.text = PlayerPrefs.GetString("GeminiAPIKey");
+            geminiApiKeyInput.text = PlayerPrefs.GetString("GeminiAPIKey");
         }
+        if (PlayerPrefs.HasKey("OpenAIAPIKey"))
+        {
+            openAiApiKeyInput.text = PlayerPrefs.GetString("OpenAIAPIKey");
+        }
+        if (PlayerPrefs.HasKey("ActiveLLMProvider"))
+        {
+            llmProviderDropdown.value = PlayerPrefs.GetInt("ActiveLLMProvider"); 
+        }
+        llmProviderDropdown.onValueChanged.AddListener((val) => ValidateLLMKey());
         
         llmSetup.SetActive(false);
         ValidateLLMKey();
@@ -152,21 +166,27 @@ public class StudyController : MonoBehaviour
     private void CloseLLMSetup()
     {
         llmSetup.SetActive(false);
-        PlayerPrefs.SetString("GeminiAPIKey", apiKeyInput.text);
+        PlayerPrefs.SetString("GeminiAPIKey", geminiApiKeyInput.text);
+        PlayerPrefs.SetString("OpenAIAPIKey", openAiApiKeyInput.text);
+        PlayerPrefs.SetInt("ActiveLLMProvider", llmProviderDropdown.value);
         PlayerPrefs.Save();
         ValidateLLMKey();
     }
 
     private void ValidateLLMKey()
     {
-        if (string.IsNullOrWhiteSpace(apiKeyInput.text))
+        bool isInvalid = false;
+
+        if (ActiveLLM == LLMProvider.Gemini && string.IsNullOrWhiteSpace(geminiApiKeyInput.text))
         {
-            llmSetupError.SetActive(true);
+            isInvalid = true;
         }
-        else
+        else if (ActiveLLM == LLMProvider.OpenAI && string.IsNullOrWhiteSpace(openAiApiKeyInput.text))
         {
-            llmSetupError.SetActive(false);
+            isInvalid = true;
         }
+            
+        llmSetupError.SetActive(isInvalid);
     }
     
     private IEnumerator ValidateMicCoroutine()
@@ -193,7 +213,9 @@ public class StudyController : MonoBehaviour
             return;
         }
         
-        PlayerPrefs.SetString("GeminiAPIKey", apiKeyInput.text);
+        PlayerPrefs.SetString("GeminiAPIKey", geminiApiKeyInput.text);
+        PlayerPrefs.SetString("OpenAIAPIKey", openAiApiKeyInput.text);
+        PlayerPrefs.SetInt("ActiveLLMProvider", llmProviderDropdown.value);
         PlayerPrefs.Save();
         
         studyDataHandler.StartCondition(participantID, condition);
@@ -231,8 +253,8 @@ public class StudyController : MonoBehaviour
 
     private IEnumerator WaitForBOInitialization()
     {
-        //yield return new WaitUntil(() => boManager.initialized);
-        yield return new WaitUntil(() => demoBoManager.initialized);
+        //yield return new WaitUntil(() => demoBoManager.initialized);
+        yield return new WaitUntil(() => boManager.initialized);
         ExtractAgentParameters();
         RespawnCar();
         StartCoroutine(CheckForFinishedLap());
@@ -240,19 +262,26 @@ public class StudyController : MonoBehaviour
     
     private void ExtractAgentParameters()
     {
-        // currentSpeed = boManager.optimizer.GetParameterValue("VehicleSpeed");
-        // currentDistanceToCenter = boManager.optimizer.GetParameterValue("VehicleDistanceToCenter");
-        // currentAcceleration = boManager.optimizer.GetParameterValue("VehicleMaxAcceleration");
-        // currentSmoothness = boManager.optimizer.GetParameterValue("VehicleSmoothness");
-
-        int4 parameterValues = demoBoManager.ReturnNextAgent();
-        currentSpeed = parameterValues[0];
-        currentDistanceToCenter = parameterValues[1];
-        currentAcceleration = parameterValues[2];
-        currentSmoothness = parameterValues[3];
+        //int4 parameterValues = demoBoManager.ReturnNextAgent();
+        //currentSpeed = parameterValues[0];
+        //currentDistanceToCenter = parameterValues[1];
+        //currentAcceleration = parameterValues[2];
+        //currentSmoothness = parameterValues[3];
         
-        agentSelector.SetValuesFromExternal(currentSpeed, currentDistanceToCenter,currentAcceleration, currentSmoothness);
-        Debug.Log($"New Agent Loaded -> Speed: {currentSpeed}, Dist: {currentDistanceToCenter}, Accel: {currentAcceleration}, Smooth: {currentSmoothness}");
+        int requestedSpeed = Mathf.RoundToInt(boManager.optimizer.GetParameterValue("VehicleSpeed"));
+        int requestedDtc = Mathf.RoundToInt(boManager.optimizer.GetParameterValue("VehicleDistanceToCenter"));
+        int requestedAccel = Mathf.RoundToInt(boManager.optimizer.GetParameterValue("VehicleMaxAcceleration"));
+        int requestedSmooth = Mathf.RoundToInt(boManager.optimizer.GetParameterValue("VehicleSmoothness"));
+        
+        agentSelector.SetValuesFromExternal(requestedSpeed, requestedDtc, requestedAccel, requestedSmooth);
+        
+        currentSpeed = agentSelector.targetSpeed; 
+        currentDistanceToCenter = agentSelector.targetDtC;
+        currentAcceleration = agentSelector.targetAccelTime;
+        currentSmoothness = agentSelector.targetSmoothness;
+        
+        Debug.Log($"[BO Requested] -> Speed: {requestedSpeed}, Dist: {requestedDtc}, Accel: {requestedAccel}, Smooth: {requestedSmooth}");
+        Debug.Log($"[Nearest Model Loaded] -> {agentSelector.CurrentLoadedModel} (Speed: {currentSpeed}, Dist: {currentDistanceToCenter}, Accel: {currentAcceleration}, Smooth: {currentSmoothness})");
     }
     
     private IEnumerator CheckForFinishedLap()
@@ -265,8 +294,8 @@ public class StudyController : MonoBehaviour
             
             yield return new WaitForEndOfFrame();
             progressWindow.SetActive(true);
-            progressRoundText.text = "Round " + demoBoManager.ReturnIterations()[0] + "/" +
-                                     demoBoManager.ReturnIterations()[1];
+            //progressRoundText.text = "Round " + demoBoManager.ReturnIterations()[0] + "/" + demoBoManager.ReturnIterations()[1];
+            progressRoundText.text = "Round " + boManager.currentIteration + "/" + boManager.totalIterations;
             progressRoundBar.value = currentLapProgressPercent / 100.0f;
             
             // Temporary break condition for testing
@@ -323,20 +352,26 @@ public class StudyController : MonoBehaviour
 
     private IEnumerator ProcessFeedbackSequence(AgentFeedback feedback, String transcript, List<string> audioFiles)
     {
-        //boManager.optimizer.AddObjectiveValue("Comfort", sliderValue);
-        //boManager.OptimizationStart();
-        //yield return new WaitUntil(() => boManager.hasNewDesignParameterValues);
-        //boManager.hasNewDesignParameterValues = false;
-        
         int[] agentParams = new int[] { currentSpeed, currentDistanceToCenter, currentAcceleration, currentSmoothness };
-        int currentRound = (int)demoBoManager.ReturnIterations()[0];
+        //int currentRound = (int)demoBoManager.ReturnIterations()[0];
+        int currentRound = boManager.currentIteration;
         studyDataHandler.LogRoundData(currentRound, agentSelector.CurrentLoadedModel, agentParams, feedback, transcript, audioFiles);
         
-        demoBoManager.GetUserResponse(feedback);
-        yield return new WaitUntil(() => demoBoManager.hasNextParameterValue);
-        demoBoManager.hasNextParameterValue = false;
+        boManager.optimizer.AddObjectiveValue("Comfort", feedback.likenessScore);
+        boManager.currentAdjustments["VehicleSpeed"] = (int)feedback.speedAdjustment;
+        boManager.currentAdjustments["VehicleDistanceToCenter"] = (int)feedback.dtcAdjustment;
+        boManager.currentAdjustments["VehicleMaxAcceleration"] = (int)feedback.accelAdjustment;
+        boManager.currentAdjustments["VehicleSmoothness"] = (int)feedback.smoothAdjustment;
+        boManager.OptimizationStart();
+        
+        //demoBoManager.GetUserResponse(feedback);
+        //yield return new WaitUntil(() => demoBoManager.hasNextParameterValue);
+        //demoBoManager.hasNextParameterValue = false;
+        yield return new WaitUntil(() => boManager.hasNewDesignParameterValues);
+        boManager.hasNewDesignParameterValues = false;
 
-        if (demoBoManager.ReturnIterations()[0] >= demoBoManager.ReturnIterations()[1])
+        //if (demoBoManager.ReturnIterations()[0] >= demoBoManager.ReturnIterations()[1])
+        if (boManager.currentIteration >= boManager.totalIterations)
         {
             EndStudy();
             yield return null;

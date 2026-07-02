@@ -64,6 +64,7 @@ namespace BOforUnity.Scripts
     [Serializable] class ObjectivesMsg : MsgBase
     {
         public Dictionary<string, float> values;
+        public Dictionary<string, int> adjustments;
     }
 
     [Serializable] class CoverageMsg : MsgBase
@@ -366,11 +367,15 @@ namespace BOforUnity.Scripts
                 float val = tmpList.Count > 0 ? (float)tmpList.Average() : 0f;
                 finalObjectives[ob.key] = val;
             }
+            
+            var currentAdjs = new Dictionary<string, int>(_bomanager.currentAdjustments);
+            _bomanager.currentAdjustments.Clear();
 
             var msg = new ObjectivesMsg
             {
                 type = "objectives",
-                values = finalObjectives
+                values = finalObjectives,
+                adjustments = currentAdjs
             };
 
             string json = JsonConvert.SerializeObject(msg, JsonSettings);

@@ -58,7 +58,7 @@ public class StudyControllerConditionB : MonoBehaviour
     public void OnEnable()
     {
         page0Title.text = "DriveYourself - ID " + studyController.participantID + " - Condition B";
-        page1Title.text = "Feedback for previous Driving Style: " + studyController.demoBoManager.ReturnIterations()[0] + "/" +
-                          studyController.demoBoManager.ReturnIterations()[1];
+        //page1Title.text = "Feedback for previous Driving Style: " + studyController.demoBoManager.ReturnIterations()[0] + "/" + studyController.demoBoManager.ReturnIterations()[1];
+        page1Title.text = "Feedback for previous Driving Style: " + studyController.boManager.currentIteration + "/" + studyController.boManager.totalIterations;
     }
 }

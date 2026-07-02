@@ -56,7 +56,8 @@ public class StudyControllerMicHandler : MonoBehaviour
                 currentAudioClip.GetData(data, 0);
                 trimmedClip.SetData(data, 0);
                 
-                int currentRound = (int)studyController.demoBoManager.ReturnIterations()[0];
+                //int currentRound = (int)studyController.demoBoManager.ReturnIterations()[0];
+                int currentRound = studyController.boManager.currentIteration;
                 string savedPath = studyController.studyDataHandler.SaveAudioAttempt(
                     studyController.participantID, conditionLetter, currentRound, retryCounter, trimmedClip);
         

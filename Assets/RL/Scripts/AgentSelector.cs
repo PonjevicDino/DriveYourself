@@ -1,10 +1,7 @@
 using UnityEngine;
 using Unity.MLAgents.Policies;
-using System.IO;
 using System.Text.RegularExpressions;
 using Unity.InferenceEngine;
-using BOforUnity;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 
 #if UNITY_EDITOR
@@ -15,15 +12,13 @@ using UnityEditor;
 public class AgentSelector : MonoBehaviour
 {
     [Header("Folder Settings")]
-    [Tooltip("Path relative to project folder. E.g. Assets/MyModels")]
-    public string rootFolder = "Assets/TrainedModels";
     public string runPrefix = "Run001";
 
     [Header("Agent Parameters")]
-    [UnityEngine.Range(50, 100)] public int targetSpeed = 50;
-    [UnityEngine.Range(0, 100)] public int targetDtC = 85;
-    [UnityEngine.Range(5, 15)] public int targetAccelTime = 10;
-    [UnityEngine.Range(1, 9)] public int targetSmoothness = 5;
+    [Range(50, 112)] public int targetSpeed = 50;
+    [Range(0, 100)] public int targetDtC = 85;
+    [Range(5, 15)] public int targetAccelTime = 10;
+    [Range(1, 9)] public int targetSmoothness = 5;
     private int oldTargetSpeed;
     private int oldTargetDtC;
     private int oldTargetAccelTime;
@@ -219,13 +214,5 @@ public class AgentSelector : MonoBehaviour
             float totalFrames = fileSmooth * physicsFps;
             agent.inputSmoothnessThreshold = fullRange / totalFrames;
         }
-    }
-
-    
-
-    public void IterationEnd()
-    {
-        agent.endEpisodeCarStuckSeconds = int.MaxValue;
-        agent.transform.parent.GetComponent<Rigidbody>().isKinematic = true;
     }
 }
