@@ -411,10 +411,10 @@ public class RCC_WheelCollider : RCC_Core {
         GroundMaterial();
         Frictions();
         TotalSlip();
-        SkidMarks();
-        Particles();
+        //SkidMarks();
+        //Particles();
         //Audio();
-        CheckDeflate();
+        //CheckDeflate();
         ESP();
 
     }
@@ -973,6 +973,8 @@ public class RCC_WheelCollider : RCC_Core {
     #endregion
 
     #region Ground Material & Terrain
+    
+    private PhysicsMaterial _lastMaterial;
 
     /// <summary>
     /// Determines current ground surface index by checking shared PhysicMaterial or terrain splatmap.
@@ -984,9 +986,13 @@ public class RCC_WheelCollider : RCC_Core {
         if (!isGrounded || wheelHit.point == Vector3.zero || wheelHit.collider == null) {
 
             groundIndex = 0;
+            _lastMaterial = null;
             return;
 
         }
+        
+        if (_lastMaterial == wheelHit.collider.sharedMaterial) return;
+        _lastMaterial = wheelHit.collider.sharedMaterial;
 
         // Check known ground materials
         for (int i = 0; i < GroundMaterials.frictions.Length; i++) {

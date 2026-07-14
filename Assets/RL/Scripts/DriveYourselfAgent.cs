@@ -78,7 +78,16 @@ public class DriveYourselfAgent : Agent
     private int decisionPeriod = 5;
     private int decisionStepCounter;
 
+    private float cachedTargetSpeedMs;
+    private float cachedWeightRatio;
+    private float cachedCurrentEffectiveLimit;
+    private float cachedCurvePower;
+    private float cachedEffectiveSteerThreshold;
+    private float cachedEffectivePedalThreshold;
+    private float cachedCurrentAllowedPeak;
+    
     [HideInInspector] public bool boMode = false;
+    [SerializeField] private bool viewMode = false;
     
     private Vector3 startingPositionForEpisode;
     [SerializeField, Min(0.0f)] private float startingPositionSidewaysOffset;
@@ -104,9 +113,11 @@ public class DriveYourselfAgent : Agent
     long fixedUpdateCounter;
     double ingameSecondsSinceStartup;
     private double timeAtLastSignificantMove;
+    private float accumulatedPhysicsTime = 0f;
     void FixedUpdate()
     {
         fixedUpdateCounter++;
+        accumulatedPhysicsTime += Time.fixedDeltaTime;
         ingameSecondsSinceStartup = fixedUpdateCounter * Time.fixedDeltaTime;
         
         currentThrottle = Mathf.MoveTowards(currentThrottle, targetThrottle, (1.0f / pedalSpeed) * Time.fixedDeltaTime);
@@ -234,8 +245,23 @@ public class DriveYourselfAgent : Agent
         fixedUpdateCounter = 0L;
         timeAtLastSignificantMove = 0.0d;
         decisionStepCounter = 0;
+        accumulatedPhysicsTime = 0f;
 
         smoothMultiplier = 1.0f;
+        
+        cachedTargetSpeedMs = targetSpeed / 3.6f;
+        cachedWeightRatio = DtCRewardPercent / 100.0f;
+        
+        float dtcTargetLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, cachedWeightRatio);
+        cachedCurrentEffectiveLimit = Mathf.Lerp(maxAllowedRewardDtc, dtcTargetLimit, dtcProgression);
+        cachedCurvePower = Mathf.Lerp(8.0f, 1.0f, cachedWeightRatio);
+        
+        cachedEffectiveSteerThreshold = Mathf.Lerp(2.0f, inputSmoothnessThreshold * decisionPeriod, smoothnessProgression);
+        cachedEffectivePedalThreshold = Mathf.Lerp(2.0f, 0.04f * decisionPeriod, smoothnessProgression);
+        
+        float linearAvgAccel = 27.78f / Mathf.Max(accelTime0to100, 1.0f);
+        float strictEnginePeak = linearAvgAccel * 1.5f; 
+        cachedCurrentAllowedPeak = Mathf.Lerp(20.0f, strictEnginePeak, smoothnessProgression);
         
         vehicleData.SyncDiscreteSegmentToSpline();
         vehicleData.InitContinuousSplineState();
@@ -253,6 +279,12 @@ public class DriveYourselfAgent : Agent
         if (!vehicleData)
         {
             return;
+        }
+        
+        if (accumulatedPhysicsTime > 0f)
+        {
+            vehicleData.UpdateVehicleData(accumulatedPhysicsTime);
+            accumulatedPhysicsTime = 0f;
         }
 
         sensor.AddObservation(targetSpeed / 100.0f);
@@ -343,12 +375,15 @@ public class DriveYourselfAgent : Agent
         //AddReward(-0.01f);
 
         // Input Text
-        agentAccText.text = "Acc: " + targetThrottle.ToString("F4");
-        agentBrkText.text = "Brk: " + targetBrake.ToString("F4");
-        agentStrText.text = "Str: " + targetSteer.ToString("F4");
-        agentSpdText.text = "Spd: " + vehicleData.GetSpeed().ToString("F1") + " km/h";
-        agentRpmText.text = "RPM: " + carController.engineRPM.ToString("F0") + " - G: " + carController.currentGear;
-        agentDtCText.text = "DtC: " + vehicleData.GetContinuousDtC().ToString("F4") + " m";
+        if (viewMode)
+        {
+            agentAccText.text = "Acc: " + targetThrottle.ToString("F4");
+            agentBrkText.text = "Brk: " + targetBrake.ToString("F4");
+            agentStrText.text = "Str: " + targetSteer.ToString("F4");
+            agentSpdText.text = "Spd: " + vehicleData.GetSpeed().ToString("F1") + " km/h";
+            agentRpmText.text = "RPM: " + carController.engineRPM.ToString("F0") + " - G: " + carController.currentGear;
+            agentDtCText.text = "DtC: " + vehicleData.GetContinuousDtC().ToString("F4") + " m";
+        }
 
         // Rewards
         //Debug.Log("AGENT State: " + lastLap + ", Progress: " + lastLapProgress + "%");
@@ -362,8 +397,7 @@ public class DriveYourselfAgent : Agent
             
         // Progress (Always rewarded)
         float velocityAlongPath = Vector3.Dot(carVelocity, trackForward);
-        float targetSpeedMs = targetSpeed / 3.6f;
-        float baseAlignmentReward = Mathf.Clamp(velocityAlongPath / targetSpeedMs, -1.0f, 1.0f);
+        float baseAlignmentReward = Mathf.Clamp(velocityAlongPath / cachedTargetSpeedMs, -1.0f, 1.0f);
 
         if (velocityAlongPath > 1.0f) 
         {
@@ -392,14 +426,8 @@ public class DriveYourselfAgent : Agent
                 
                 
         // DtC
-        float weightRatio = DtCRewardPercent / 100.0f;
-    
-        float dtcTargetLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, weightRatio);
-        float currentEffectiveLimit = Mathf.Lerp(maxAllowedRewardDtc, dtcTargetLimit, dtcProgression);
-
-        float normalizedDtC = Mathf.Clamp01(currentDtC / currentEffectiveLimit);
-        float curvePower = Mathf.Lerp(8.0f, 1.0f, weightRatio);
-        float dtcScore = 1.0f - Mathf.Pow(normalizedDtC, curvePower);
+        float normalizedDtC = Mathf.Clamp01(currentDtC / cachedCurrentEffectiveLimit);
+        float dtcScore = 1.0f - Mathf.Pow(normalizedDtC, cachedCurvePower);
         
             // Reward for Progress + Speed + DtC
             // float universalFloor = 0.40f;
@@ -460,10 +488,7 @@ public class DriveYourselfAgent : Agent
 
         if (longitudinalAccel > 0.0f) 
         {
-            float linearAvgAccel = 27.78f / Mathf.Max(accelTime0to100, 1.0f);
-            float strictEnginePeak = linearAvgAccel * 1.5f; 
-            float currentAllowedPeak = Mathf.Lerp(20.0f, strictEnginePeak, smoothnessProgression);
-            accMultiplier = CalculateCliffReward(longitudinalAccel, currentAllowedPeak, 5.0f);
+            accMultiplier = CalculateCliffReward(longitudinalAccel, cachedCurrentAllowedPeak, 5.0f);
         }
         else 
         {
@@ -484,10 +509,9 @@ public class DriveYourselfAgent : Agent
         {
             float deltaPedals = Mathf.Abs(targetThrottle - lastThrottleInput) + Mathf.Abs(targetBrake - lastBrakeInput);
             float deltaSteer = Mathf.Abs(targetSteer - lastSteeringAction);
-            float effectiveSteerThreshold = Mathf.Lerp(2.0f, inputSmoothnessThreshold * decisionPeriod, smoothnessProgression);
-            float steerMultiplier = CalculateCliffReward(deltaSteer, effectiveSteerThreshold, 2.0f);
-            float effectivePedalThreshold = Mathf.Lerp(2.0f, 0.04f * decisionPeriod, smoothnessProgression);
-            float pedalMultiplier = CalculateCliffReward(deltaPedals, effectivePedalThreshold, 2.0f);
+            
+            float steerMultiplier = CalculateCliffReward(deltaSteer, cachedEffectiveSteerThreshold, 2.0f);
+            float pedalMultiplier = CalculateCliffReward(deltaPedals, cachedEffectivePedalThreshold, 2.0f);
             smoothMultiplier = steerMultiplier * pedalMultiplier;
             
             lastThrottleInput = targetThrottle;
@@ -498,7 +522,7 @@ public class DriveYourselfAgent : Agent
             decisionStepCounter = 0;
         }
             
-        float dynamicFloor = Mathf.Lerp(0.25f, 0.0f, weightRatio);
+        float dynamicFloor = Mathf.Lerp(0.25f, 0.0f, cachedWeightRatio);
         float dtcMultiplier = Mathf.Lerp(dynamicFloor, 1.0f, dtcScore);
         float combinedMultiplier = speedScore * dtcMultiplier * smoothMultiplier * accMultiplier;
         float stepReward;

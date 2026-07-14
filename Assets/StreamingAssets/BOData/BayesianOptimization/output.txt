@@ -1,6 +1,6 @@
 Server starts, waiting for connection...
-Connected by ('127.0.0.1', 62883)
-Init OK: {'BATCH_SIZE': 1, 'NUM_RESTARTS': 10, 'RAW_SAMPLES': 1024, 'N_ITERATIONS': 10, 'MC_SAMPLES': 512, 'N_INITIAL': 9, 'SEED': 3, 'PROBLEM_DIM': 4, 'NUM_OBJS': 1}
+Connected by ('127.0.0.1', 58376)
+Init OK: {'BATCH_SIZE': 1, 'NUM_RESTARTS': 10, 'RAW_SAMPLES': 1024, 'N_ITERATIONS': 5, 'MC_SAMPLES': 512, 'N_INITIAL': 9, 'SEED': 3, 'PROBLEM_DIM': 4, 'NUM_OBJS': 1}
 Initial Sobol X in [0,1]: tensor([[0.0685, 0.2245, 0.6992, 0.0626],
         [0.3754, 0.0304, 0.1474, 0.3385],
         [0.2702, 0.2726, 0.6900, 0.3892],
@@ -40,19 +40,3 @@ Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 74.269, 'Vehi
 Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 73.15, 'VehicleDistanceToCenter': 94.475, 'VehicleMaxAcceleration': 7.977, 'VehicleSmoothness': 7.719}}
 -> Updated 4 preference priors based on user feedback.
 Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 71.875, 'VehicleDistanceToCenter': 96.66, 'VehicleMaxAcceleration': 8.017, 'VehicleSmoothness': 8.023}}
--> Updated 4 preference priors based on user feedback.
-Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 70.608, 'VehicleDistanceToCenter': 98.715, 'VehicleMaxAcceleration': 8.166, 'VehicleSmoothness': 8.328}}
--> Updated 4 preference priors based on user feedback.
-Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 69.845, 'VehicleDistanceToCenter': 100.0, 'VehicleMaxAcceleration': 8.531, 'VehicleSmoothness': 8.592}}
--> Updated 4 preference priors based on user feedback.
-Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 69.052, 'VehicleDistanceToCenter': 100.0, 'VehicleMaxAcceleration': 8.929, 'VehicleSmoothness': 8.834}}
--> Updated 4 preference priors based on user feedback.
-Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 68.221, 'VehicleDistanceToCenter': 100.0, 'VehicleMaxAcceleration': 9.393, 'VehicleSmoothness': 9.0}}
--> Updated 4 preference priors based on user feedback.
-Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 68.501, 'VehicleDistanceToCenter': 100.0, 'VehicleMaxAcceleration': 9.927, 'VehicleSmoothness': 9.0}}
--> Updated 4 preference priors based on user feedback.
-Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 68.234, 'VehicleDistanceToCenter': 100.0, 'VehicleMaxAcceleration': 10.445, 'VehicleSmoothness': 9.0}}
--> Updated 4 preference priors based on user feedback.
-Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 68.36, 'VehicleDistanceToCenter': 100.0, 'VehicleMaxAcceleration': 10.963, 'VehicleSmoothness': 9.0}}
--> Updated 4 preference priors based on user feedback.
-Send parameters: {'type': 'parameters', 'values': {'VehicleSpeed': 68.486, 'VehicleDistanceToCenter': 100.0, 'VehicleMaxAcceleration': 11.506, 'VehicleSmoothness': 9.0}}

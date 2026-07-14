@@ -58,6 +58,8 @@ public class OpenLabDayHandler : MonoBehaviour
         smoothnessSlider.onValueChanged.AddListener(delegate {UpdateAgentSmoothness();});
 
         LaunchMultiDisplay();
+
+        GlobalSettings.showDebugRays = false;
     }
 
     private void Update()
@@ -255,7 +257,7 @@ public class OpenLabDayHandler : MonoBehaviour
 
     private void UpdateAgentSpeed()
     {
-        int sliderTargetSpeed = Mathf.RoundToInt(Mathf.Lerp(50.0f, 100.0f, speedSlider.value));
+        int sliderTargetSpeed = Mathf.RoundToInt(Mathf.Lerp(50.0f, 112.0f, speedSlider.value));
         agentSelector.targetSpeed = sliderTargetSpeed;
         agentSelector.FindAndAssignModel();
     }

@@ -31,6 +31,8 @@ public class GetVehicleData : MonoBehaviour
     private int currentContinuousLap = 1;
     private float lastT = 0f;
     private float accumulatedT = 0f;
+    
+    private Vector3 cachedForwardVector = Vector3.forward;
 
     void Start()
     {
@@ -49,20 +51,21 @@ public class GetVehicleData : MonoBehaviour
         }
     }
 
-    void FixedUpdate()
+    public void UpdateVehicleData(float accumulatedDeltaTime)
     {
         if (!carController || !carRb) return;
+        if (accumulatedDeltaTime <= 0f) return;
 
         Vector3 currentVelocity = carRb.linearVelocity;
-        Vector3 accelerationWorld = (currentVelocity - lastVelocity) / Time.fixedDeltaTime;
+        Vector3 accelerationWorld = (currentVelocity - lastVelocity) / accumulatedDeltaTime;
 
         currentAccelerationVector = carController.transform.InverseTransformDirection(accelerationWorld);
         currentAccelerationMagnitude = currentAccelerationVector.magnitude;
-        currentJerk = (currentAccelerationMagnitude - lastAccelerationMag) / Time.fixedDeltaTime;
+        currentJerk = (currentAccelerationMagnitude - lastAccelerationMag) / accumulatedDeltaTime;
         lastVelocity = currentVelocity;
         lastAccelerationMag = currentAccelerationMagnitude;
         
-        EvaluateSplineData();
+        EvaluateSplineData(accumulatedDeltaTime);
     }
     
     public void InitContinuousSplineState()
@@ -145,7 +148,7 @@ public class GetVehicleData : MonoBehaviour
         // currentContinuousProgressPercent = 0f;
     }
     
-    private void EvaluateSplineData()
+    private void EvaluateSplineData(float fixedDeltaTime)
     {
         if (!roadLayout || roadLayout.trackSpline == null) return;
         
@@ -184,9 +187,10 @@ public class GetVehicleData : MonoBehaviour
         Vector3 flatTrackForward = new Vector3(trackForwardWorld.x, 0f, trackForwardWorld.z).normalized;
         float side = Mathf.Sign(Vector3.Dot(Vector3.Cross(Vector3.up, flatTrackForward), flatTrackToCar));
         
+        cachedForwardVector = trackForwardWorld.normalized;
         currentContinuousDtC = distance * side;
         
-        continuousDtCVelocity = (currentContinuousDtC - previousContinuousDtC) / Time.fixedDeltaTime;
+        continuousDtCVelocity = (currentContinuousDtC - previousContinuousDtC) / fixedDeltaTime;
         previousContinuousDtC = currentContinuousDtC;
     }
     
@@ -283,10 +287,7 @@ public class GetVehicleData : MonoBehaviour
     
     public Vector3 GetContinuousForwardVector() 
     {
-        if (!roadLayout || !roadLayout.trackSpline) return Vector3.forward;
-        Spline spline = roadLayout.trackSpline.Spline;
-        float3 trackForwardLocal = SplineUtility.EvaluateTangent(spline, lastT);
-        return roadLayout.trackSpline.transform.TransformDirection(trackForwardLocal).normalized;
+        return cachedForwardVector;
     }
 
     public float GetSpeed()
