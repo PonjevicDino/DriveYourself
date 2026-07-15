@@ -34,7 +34,7 @@ public class GetVehicleData : MonoBehaviour
     
     private Vector3 cachedForwardVector = Vector3.forward;
 
-    void Start()
+    void Awake()
     {
         carController = this.transform.parent.GetComponent<RCC_CarControllerV4>();
         carRb = carController.GetComponent<Rigidbody>();
@@ -70,7 +70,7 @@ public class GetVehicleData : MonoBehaviour
     
     public void InitContinuousSplineState()
     {
-        if (roadLayout == null || roadLayout.trackSpline == null) return;
+        if (roadLayout == null || roadLayout.trackSpline == null || carController == null) return;
         
         Spline spline = roadLayout.trackSpline.Spline;
         Vector3 carWorldPos = carController.transform.position;
@@ -87,7 +87,7 @@ public class GetVehicleData : MonoBehaviour
     
     public void CheckIfNextSegmentHasBeenReached()
     {
-        if (roadLayout == null || nextPoint == null) return;
+        if (roadLayout == null || nextPoint == null || carController == null) return;
 
         Vector2 carPos2D = new Vector2(carController.transform.position.x, carController.transform.position.z);
         Vector2 targetPos2D = new Vector2(nextPoint.position.x, nextPoint.position.z);
@@ -237,7 +237,7 @@ public class GetVehicleData : MonoBehaviour
     
     public void SyncDiscreteSegmentToSpline()
     {
-        if (roadLayout == null || roadLayout.roadSegments.Count == 0) return;
+        if (roadLayout == null || roadLayout.roadSegments.Count == 0 || carController == null) return;
 
         Vector3 carPos = carController.transform.position;
         Vector3 carForward = carController.transform.forward;

@@ -336,6 +336,7 @@ public class RCC_LogitechSteeringWheel : MonoBehaviour
     public bool overrideFFB = false;
     [HideInInspector]
     public float steerInput = 0.0f;
+    public bool TurnOffFFB = false;
 
     void Start()
     {
@@ -372,7 +373,7 @@ public class RCC_LogitechSteeringWheel : MonoBehaviour
         {
             try
             {
-                playerVehicle = RCC_SceneManager.Instance.activePlayerVehicle;
+                playerVehicle = this.GetComponent<RCC_CarControllerV4>();
             }
             catch { }
             return;
@@ -381,10 +382,21 @@ public class RCC_LogitechSteeringWheel : MonoBehaviour
         if (LogitechGSDK.LogiUpdate() && LogitechGSDK.LogiIsConnected(0))
         {
             vehicleInputManager.RCC_SteeringWheel(LogitechGSDK.LogiGetStateUnity(0));
+
+            if (TurnOffFFB)
+            {
+                LogitechGSDK.LogiStopSpringForce(0);
+                LogitechGSDK.LogiStopConstantForce(0);
+                LogitechGSDK.LogiStopDamperForce(0);
+                LogitechGSDK.LogiStopSurfaceEffect(0);
+                LogitechGSDK.LogiStopDirtRoadEffect(0);
+                return;
+            }
+            
             ForceFeedback();
             if (overrideFFB)
             {
-                LogitechGSDK.LogiPlayConstantForce(0, Mathf.CeilToInt(-steerInput * 100.0f));
+                LogitechGSDK.LogiPlaySpringForce(0, Mathf.CeilToInt(steerInput * 100.0f), 100, 100);
             }
         }
         else if (!LogitechGSDK.LogiIsConnected(0))
@@ -427,7 +439,6 @@ public class RCC_LogitechSteeringWheel : MonoBehaviour
 
     private void SimulateABSandESP(float sidewaysForce)
     {
-        RCC_CarControllerV4 playerVehicle = RCC_SceneManager.Instance.activePlayerVehicle;
         int absFFB = Random.Range(50, 100);
         int espFFB = Mathf.CeilToInt(sidewaysForce * 0.2f);
 

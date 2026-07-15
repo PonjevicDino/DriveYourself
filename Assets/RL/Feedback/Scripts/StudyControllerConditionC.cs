@@ -201,7 +201,7 @@ public class StudyControllerConditionC : MonoBehaviour
         inputStep.SetActive(false);
         errorText.SetActive(false);
         
-        string[] opts = { "much less", "slightly less", "keep", "slightly more", "much more" };
+        string[] opts = { "much less", "slightly less", "keep", "slightly more", "much more", "ignore" };
         string s = opts[Random.Range(0, opts.Length)];
         string d = opts[Random.Range(0, opts.Length)];
         string a = opts[Random.Range(0, opts.Length)];
@@ -219,16 +219,17 @@ public class StudyControllerConditionC : MonoBehaviour
     
     private StudyController.ParameterAdjustment StringToEnum(string val)
     {
-        if (string.IsNullOrEmpty(val)) return StudyController.ParameterAdjustment.Keep;
+        if (string.IsNullOrEmpty(val)) return StudyController.ParameterAdjustment.Ignore;
 
         val = val.ToLower().Trim();
         switch (val)
         {
             case "much less": return StudyController.ParameterAdjustment.MuchLess;
             case "slightly less": return StudyController.ParameterAdjustment.SlightlyLess;
+            case "keep": return StudyController.ParameterAdjustment.Keep;
             case "slightly more": return StudyController.ParameterAdjustment.SlightlyMore;
             case "much more": return StudyController.ParameterAdjustment.MuchMore;
-            default: return StudyController.ParameterAdjustment.Keep;
+            default: return StudyController.ParameterAdjustment.Ignore;
         }
     }
     

@@ -27,6 +27,7 @@ public class AgentSelector : MonoBehaviour
     [Header("Status")]
     [SerializeField] private string currentLoadedModel = "None";
     public string CurrentLoadedModel => currentLoadedModel;
+    [HideInInspector] public bool isUpdatingModel = false;
 
     private BehaviorParameters behaviorParameters;
     private DriveYourselfAgent agent;
@@ -95,47 +96,58 @@ public class AgentSelector : MonoBehaviour
 
     public async void FindAndAssignModel()
     {
-        if (behaviorParameters == null) return;
+        isUpdatingModel = true;
 
-        if (lastRunPrefix != runPrefix)
+        try
         {
-            lastRunPrefix = runPrefix;
-            resourcesPath = "Models/" + runPrefix;
-            SearchInModelDatabase();
-        }
-        
-        if (availableModels == null || availableModels.Length == 0)
-        {
-            Debug.LogWarning($"[ModelSelector] No models found in Resources path: {resourcesPath}. Keeping previous model.");
-            return;
-        }
-        
-        string[] modelNames = new string[availableModels.Length];
-        for (int i = 0; i < availableModels.Length; i++)
-        {
-            modelNames[i] = availableModels[i].name;
-        }
-        
-        int currentTargetSpeed = targetSpeed;
-        int currentTargetDtC = targetDtC;
-        int currentTargetAccelTime = targetAccelTime;
-        int currentTargetSmoothness = targetSmoothness;
-        
-        int bestIndex = await Task.Run(() => 
-        {
-            return GetBestModelIndex(modelNames, currentTargetSpeed, currentTargetDtC, currentTargetAccelTime, currentTargetSmoothness);
-        });
-        
-        if (bestIndex != -1)
-        {
-            ModelAsset bestModel = availableModels[bestIndex];
+            if (behaviorParameters == null) return;
 
-            if (currentLoadedModel == bestModel.name && behaviorParameters.Model != null) return;
+            if (lastRunPrefix != runPrefix)
+            {
+                lastRunPrefix = runPrefix;
+                resourcesPath = "Models/" + runPrefix;
+                SearchInModelDatabase();
+            }
 
-            behaviorParameters.Model = bestModel;
-            currentLoadedModel = bestModel.name;
-            
-            ApplyModelStatsFromName(bestModel.name);
+            if (availableModels == null || availableModels.Length == 0)
+            {
+                Debug.LogWarning(
+                    $"[ModelSelector] No models found in Resources path: {resourcesPath}. Keeping previous model.");
+                return;
+            }
+
+            string[] modelNames = new string[availableModels.Length];
+            for (int i = 0; i < availableModels.Length; i++)
+            {
+                modelNames[i] = availableModels[i].name;
+            }
+
+            int currentTargetSpeed = targetSpeed;
+            int currentTargetDtC = targetDtC;
+            int currentTargetAccelTime = targetAccelTime;
+            int currentTargetSmoothness = targetSmoothness;
+
+            int bestIndex = await Task.Run(() =>
+            {
+                return GetBestModelIndex(modelNames, currentTargetSpeed, currentTargetDtC, currentTargetAccelTime,
+                    currentTargetSmoothness);
+            });
+
+            if (bestIndex != -1)
+            {
+                ModelAsset bestModel = availableModels[bestIndex];
+
+                if (currentLoadedModel == bestModel.name && behaviorParameters.Model != null) return;
+
+                behaviorParameters.Model = bestModel;
+                currentLoadedModel = bestModel.name;
+
+                ApplyModelStatsFromName(bestModel.name);
+            }
+        }
+        finally
+        {
+            isUpdatingModel = false;
         }
     }
     

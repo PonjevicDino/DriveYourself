@@ -10,7 +10,7 @@ public class StudyControllerLlmHandler : MonoBehaviour
     private const string geminiApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=";
     private const string openAiApiUrl = "https://api.openai.com/v1/chat/completions";
 
-    private const string systemPrompt = "You are an intent parser for an autonomous driving simulator. Extract the user's desired changes for 4 parameters: 'speed', 'distance to the center', 'acceleration', and 'smoothness'. Map their intent strictly to one of these exact values: 'much less', 'slightly less', 'keep', 'slightly more', 'much more'. If a parameter isn't mentioned, default to 'keep'. Additionally, deduce a 'likenessScore' as a float between 0.0 and 1.0 indicating how much the user liked the previous driving style based on their sentiment (e.g., highly critical/frustrated = 0.0-0.3, neutral/mixed = 0.4-0.6, highly positive = 0.7-1.0). If unsure, default to 0.5. If the text is completely unrelated or unintelligible, set 'isValid' to false. Reply ONLY with a JSON object matching this structure: {\"isValid\": true, \"likenessScore\": 0.5, \"speed\": \"keep\", \"dtc\": \"keep\", \"acceleration\": \"keep\", \"smoothness\": \"keep\"}";
+    private const string systemPrompt = "You are an intent parser for an autonomous driving simulator. Extract the user's desired changes for 4 parameters: 'speed', 'distance to the center', 'acceleration', and 'smoothness'. Map their intent strictly to one of these exact values: 'much less', 'slightly less', 'keep', 'slightly more', 'much more', 'ignore'. If a parameter isn't mentioned, default to 'ignore'. Additionally, deduce a 'likenessScore' as a float between 0.0 and 1.0 indicating how much the user liked the previous driving style based on their sentiment (e.g., highly critical/frustrated = 0.0-0.3, neutral/mixed = 0.4-0.6, highly positive = 0.7-1.0). If unsure, default to 0.5. If the text is completely unrelated or unintelligible, set 'isValid' to false. Reply ONLY with a JSON object matching this structure: {\"isValid\": true, \"likenessScore\": 0.5, \"speed\": \"keep\", \"dtc\": \"keep\", \"acceleration\": \"keep\", \"smoothness\": \"keep\"}";
 
     private void Start()
     {
@@ -19,7 +19,7 @@ public class StudyControllerLlmHandler : MonoBehaviour
 
     public IEnumerator ProcessIntent(string userText, Action<MappedFeedback> onSuccess, Action<string> onError)
     {
-        string safeUserText = userText.Replace("\"", "\\\"").Replace("\n", " ").Trim();
+        string safeUserText = userText.Trim();
         
         if (studyController.ActiveLLM == StudyController.LLMProvider.Gemini)
         {
@@ -34,10 +34,21 @@ public class StudyControllerLlmHandler : MonoBehaviour
     private IEnumerator SendToGemini(string userText, Action<MappedFeedback> onSuccess, Action<string> onError)
     {
         string combinedPrompt = $"{systemPrompt}\n\nUser Input: {userText}";
-        string requestData = $@"{{
-            ""contents"": [ {{ ""parts"": [ {{ ""text"": ""{combinedPrompt}"" }} ] }} ],
-            ""generationConfig"": {{ ""temperature"": 0.0, ""responseMimeType"": ""application/json"" }}
-        }}";
+        
+        GeminiRequest payload = new GeminiRequest
+        {
+            contents = new Content[]
+            {
+                new Content { parts = new Part[] { new Part { text = combinedPrompt } } }
+            },
+            generationConfig = new GeminiGenConfig
+            {
+                temperature = 0.0f,
+                responseMimeType = "application/json"
+            }
+        };
+
+        string requestData = JsonUtility.ToJson(payload);
         
         string apiKey = PlayerPrefs.GetString("GeminiAPIKey", "");
         string requestUrl = geminiApiUrl + apiKey;
@@ -74,15 +85,19 @@ public class StudyControllerLlmHandler : MonoBehaviour
 
     private IEnumerator SendToOpenAI(string userText, Action<MappedFeedback> onSuccess, Action<string> onError)
     {
-        string requestData = $@"{{
-            ""model"": ""gpt-4o-mini"",
-            ""response_format"": {{ ""type"": ""json_object"" }},
-            ""temperature"": 0.0,
-            ""messages"": [
-                {{ ""role"": ""system"", ""content"": ""{systemPrompt}"" }},
-                {{ ""role"": ""user"", ""content"": ""{userText}"" }}
-            ]
-        }}";
+        OpenAIRequest payload = new OpenAIRequest
+        {
+            model = "gpt-4o-mini",
+            response_format = new OpenAIResponseFormat { type = "json_object" },
+            temperature = 0.0f,
+            messages = new OpenAIMessage[]
+            {
+                new OpenAIMessage { role = "system", content = systemPrompt },
+                new OpenAIMessage { role = "user", content = userText }
+            }
+        };
+
+        string requestData = JsonUtility.ToJson(payload);
         
         string apiKey = PlayerPrefs.GetString("OpenAIAPIKey", "");
         
@@ -130,6 +145,18 @@ public class MappedFeedback
 }
 
 [System.Serializable]
+public class GeminiRequest
+{
+    public Content[] contents;
+    public GeminiGenConfig generationConfig;
+}
+[System.Serializable]
+public class GeminiGenConfig
+{
+    public float temperature;
+    public string responseMimeType;
+}
+[System.Serializable]
 public class GeminiResponse { public Candidate[] candidates; }
 [System.Serializable]
 public class Candidate { public Content content; }
@@ -138,9 +165,24 @@ public class Content { public Part[] parts; }
 [System.Serializable]
 public class Part { public string text; }
 
+
+[System.Serializable]
+public class OpenAIRequest
+{
+    public string model;
+    public OpenAIResponseFormat response_format;
+    public float temperature;
+    public OpenAIMessage[] messages;
+}
+[System.Serializable]
+public class OpenAIResponseFormat { public string type; }
 [System.Serializable]
 public class OpenAIResponse { public OpenAIChoice[] choices; }
 [System.Serializable]
 public class OpenAIChoice { public OpenAIMessage message; }
 [System.Serializable]
-public class OpenAIMessage { public string content; }
+public class OpenAIMessage 
+{ 
+    public string role;
+    public string content; 
+}

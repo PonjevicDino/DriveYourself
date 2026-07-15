@@ -10,6 +10,7 @@ using UnityEngine.Splines;
 public class DriveYourselfAgent : Agent
 {
     private RCC_CarControllerV4 carController;
+    private RCC_LogitechSteeringWheel steeringWheel; 
 
     private float episodeProgressReward;
     private float episodeSpeedPenalty;
@@ -78,7 +79,7 @@ public class DriveYourselfAgent : Agent
     private int decisionPeriod = 5;
     private int decisionStepCounter;
 
-    private float cachedTargetSpeedMs;
+    private float cachedTargetSpeedMs = -1.0f;
     private float cachedWeightRatio;
     private float cachedCurrentEffectiveLimit;
     private float cachedCurvePower;
@@ -95,7 +96,7 @@ public class DriveYourselfAgent : Agent
     [SerializeField, Min(0.0f)] private float startingMaximumForwardSpeed;
     [SerializeField, Min(0.0f)] private float startingMaximumSidewaysSpeed;
 
-    void Start()
+    public override void Initialize()
     {
         carController = this.transform.parent.GetComponent<RCC_CarControllerV4>();
         
@@ -129,6 +130,11 @@ public class DriveYourselfAgent : Agent
             carController.throttleInput = currentThrottle;
             carController.brakeInput = currentBrake;
             carController.steerInput = currentSteeringAngle;
+        }
+
+        if (steeringWheel)
+        {
+            steeringWheel.steerInput = currentSteeringAngle;
         }
     }
     
@@ -185,13 +191,13 @@ public class DriveYourselfAgent : Agent
         episodeMaxAcceleration = 0.0f;
         episodeSmoothnessPenalty = 0.0f;
         episodeAccelerationPenalty = 0.0f;
-
-        ForceDisableAllParticles();
-
+        
         if (!carController)
         {
             return;
         }
+        
+        ForceDisableAllParticles();
 
         //this.transform.parent.Find("All Audio Sources").gameObject.SetActive(false);
         this.transform.parent.Find("All Contact Particles").gameObject.SetActive(false);
@@ -228,10 +234,10 @@ public class DriveYourselfAgent : Agent
 #if UNITY_EDITOR || UNITY_STANDALONE_WIN
         if (!Application.isBatchMode)
         {
-            var wheel = carController.GetComponent<RCC_LogitechSteeringWheel>();
-            if (wheel) 
+            steeringWheel = carController.GetComponent<RCC_LogitechSteeringWheel>();
+            if (steeringWheel != null) 
             { 
-                wheel.overrideFFB = true;
+                steeringWheel.overrideFFB = true;
             }
         }
 #endif

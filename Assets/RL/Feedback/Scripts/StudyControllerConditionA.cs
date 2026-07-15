@@ -18,10 +18,10 @@ public class StudyControllerConditionA : MonoBehaviour
         StudyController.AgentFeedback feedback = new StudyController.AgentFeedback
         {
             likenessScore = feedbackSlider.value,
-            speedAdjustment = StudyController.ParameterAdjustment.Keep,
-            dtcAdjustment = StudyController.ParameterAdjustment.Keep,
-            accelAdjustment = StudyController.ParameterAdjustment.Keep,
-            smoothAdjustment = StudyController.ParameterAdjustment.Keep
+            speedAdjustment = StudyController.ParameterAdjustment.Ignore,
+            dtcAdjustment = StudyController.ParameterAdjustment.Ignore,
+            accelAdjustment = StudyController.ParameterAdjustment.Ignore,
+            smoothAdjustment = StudyController.ParameterAdjustment.Ignore
         };
 
         studyController.SubmitFeedback(feedback);

@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using BOforUnity;
 using TMPro;
-using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -47,6 +46,12 @@ public class StudyController : MonoBehaviour
     [SerializeField] private Transform startingPosition;
     [SerializeField] private AgentSelector agentSelector;
     [SerializeField] private GetVehicleData vehicleData;
+    
+    [Header("Car 2")]
+    private GameObject car2;
+    private AgentSelector agentSelector2;
+    private GetVehicleData vehicleData2;
+    private bool isPairwiseMode = false;
 
     [Header("Bayesian Optimization")]
     //[SerializeField] public DemoBO demoBoManager;
@@ -57,10 +62,17 @@ public class StudyController : MonoBehaviour
     private int currentAcceleration;
     private int currentSmoothness;
     
+    [Header("Pairwise Tracking")]
+    private int prevSpeed = 50; // Default baseline values
+    private int prevDtc = 85;
+    private int prevAccel = 10;
+    private int prevSmooth = 5;
+    
     private float ctrlHoldTimer = 0f;
     
     public enum ParameterAdjustment 
     {
+        Ignore = -999,
         MuchLess = -2,
         SlightlyLess = -1,
         Keep = 0,
@@ -219,8 +231,82 @@ public class StudyController : MonoBehaviour
         PlayerPrefs.Save();
         
         studyDataHandler.StartCondition(participantID, condition);
-        
         startupWindow.SetActive(false);
+        
+        isPairwiseMode = (condition == "D");
+        if (isPairwiseMode)
+        {
+            if (car2 == null)
+            {
+                car2 = Instantiate(car, car.transform.parent);
+                
+                var cloneWheel = car2.GetComponent<RCC_LogitechSteeringWheel>();
+                if (cloneWheel != null) Destroy(cloneWheel);
+                
+                car2.GetComponent<Rigidbody>().isKinematic = true;
+                car2.transform.SetPositionAndRotation(startingPosition.position, startingPosition.rotation);
+                Physics.SyncTransforms();
+                agentSelector2 = car2.GetComponentInChildren<AgentSelector>();
+                vehicleData2 = car2.GetComponentInChildren<GetVehicleData>();
+
+                string[] layerNames = { "RCC_Vehicle", "RCC_WheelCollider", "RCC_DetachablePart", "RCC_Prop" };
+
+                Dictionary<int, int> layerMapping = new Dictionary<int, int>();
+                int car1Mask = 0;
+                int car2Mask = 0;
+
+                for (int i = 0; i < layerNames.Length; i++)
+                {
+                    int l1 = LayerMask.NameToLayer(layerNames[i]);
+                    int l2 = LayerMask.NameToLayer(layerNames[i] + "2");
+
+                    if (l1 != -1 && l2 != -1)
+                    {
+                        layerMapping[l1] = l2;
+                        car1Mask |= (1 << l1);
+                        car2Mask |= (1 << l2);
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"Layer missing! Check spelling for {layerNames[i]}");
+                    }
+                }
+
+                SetLayerRecursivelyMapped(car2, layerMapping);
+
+                Camera cam1 = car.GetComponentInChildren<Camera>();
+                Camera cam2 = car2.GetComponentInChildren<Camera>();
+
+                if (cam1 != null && cam2 != null)
+                {
+                    cam1.cullingMask &= ~car2Mask;
+                    cam2.cullingMask &= ~car1Mask;
+
+                    cam1.rect = new Rect(0f, 0f, 0.5f, 1f);
+                    cam2.rect = new Rect(0.5f, 0f, 0.5f, 1f);
+                    
+                    AudioListener audioListener = cam2.GetComponent<AudioListener>();
+                    if (audioListener != null)
+                    {
+                        Destroy(audioListener);
+                    }
+                    
+                    AudioSource[] car2Audio = car2.GetComponentsInChildren<AudioSource>(true);
+                    foreach (AudioSource src in car2Audio)
+                    {
+                        src.spatialBlend = 0f;
+                    }
+                }
+            }
+            car2.SetActive(true);
+        }
+        else if (car2 != null)
+        {
+            car2.SetActive(false);
+        }
+        
+        UpdateSteeringWheelState(true);
+        
         switch (condition)
         {
             case "A":
@@ -255,12 +341,12 @@ public class StudyController : MonoBehaviour
     {
         //yield return new WaitUntil(() => demoBoManager.initialized);
         yield return new WaitUntil(() => boManager.initialized);
-        ExtractAgentParameters();
+        yield return StartCoroutine(ExtractAgentParameters());
         RespawnCar();
         StartCoroutine(CheckForFinishedLap());
     }
     
-    private void ExtractAgentParameters()
+    private IEnumerator ExtractAgentParameters()
     {
         //int4 parameterValues = demoBoManager.ReturnNextAgent();
         //currentSpeed = parameterValues[0];
@@ -273,12 +359,31 @@ public class StudyController : MonoBehaviour
         int requestedAccel = Mathf.RoundToInt(boManager.optimizer.GetParameterValue("VehicleMaxAcceleration"));
         int requestedSmooth = Mathf.RoundToInt(boManager.optimizer.GetParameterValue("VehicleSmoothness"));
         
-        agentSelector.SetValuesFromExternal(requestedSpeed, requestedDtc, requestedAccel, requestedSmooth);
+        if (isPairwiseMode && car2 != null)
+        {
+            agentSelector.SetValuesFromExternal(prevSpeed, prevDtc, prevAccel, prevSmooth);
+            agentSelector2.SetValuesFromExternal(requestedSpeed, requestedDtc, requestedAccel, requestedSmooth);
+        }
+        else
+        {
+            agentSelector.SetValuesFromExternal(requestedSpeed, requestedDtc, requestedAccel, requestedSmooth);
+        }
         
-        currentSpeed = agentSelector.targetSpeed; 
-        currentDistanceToCenter = agentSelector.targetDtC;
-        currentAcceleration = agentSelector.targetAccelTime;
-        currentSmoothness = agentSelector.targetSmoothness;
+        yield return new WaitUntil(() => !agentSelector.isUpdatingModel);
+        if (isPairwiseMode && car2 != null)
+        {
+            yield return new WaitUntil(() => !agentSelector2.isUpdatingModel);
+        }
+        
+        currentSpeed = isPairwiseMode ? agentSelector2.targetSpeed : agentSelector.targetSpeed; 
+        currentDistanceToCenter = isPairwiseMode ? agentSelector2.targetDtC : agentSelector.targetDtC;
+        currentAcceleration = isPairwiseMode ? agentSelector2.targetAccelTime : agentSelector.targetAccelTime;
+        currentSmoothness = isPairwiseMode ? agentSelector2.targetSmoothness : agentSelector.targetSmoothness;
+        
+        prevSpeed = currentSpeed;
+        prevDtc = currentDistanceToCenter;
+        prevAccel = currentAcceleration;
+        prevSmooth = currentSmoothness;
         
         Debug.Log($"[BO Requested] -> Speed: {requestedSpeed}, Dist: {requestedDtc}, Accel: {requestedAccel}, Smooth: {requestedSmooth}");
         Debug.Log($"[Nearest Model Loaded] -> {agentSelector.CurrentLoadedModel} (Speed: {currentSpeed}, Dist: {currentDistanceToCenter}, Accel: {currentAcceleration}, Smooth: {currentSmoothness})");
@@ -286,17 +391,19 @@ public class StudyController : MonoBehaviour
     
     private IEnumerator CheckForFinishedLap()
     {
-        float currentLapProgressPercent = vehicleData.GetContinuousProgress();
+        float p1 = vehicleData.GetContinuousProgress();
+        float p2 = isPairwiseMode ? vehicleData2.GetContinuousProgress() : 100.0f;
         
-        while (currentLapProgressPercent < 100.0f)
+        while (p1 < 100.0f || p2 < 100.0f)
         {
-            currentLapProgressPercent = vehicleData.GetContinuousProgress();
+            p1 = vehicleData.GetContinuousProgress();
+            if (isPairwiseMode) p2 = vehicleData2.GetContinuousProgress();
             
             yield return new WaitForEndOfFrame();
             progressWindow.SetActive(true);
-            //progressRoundText.text = "Round " + demoBoManager.ReturnIterations()[0] + "/" + demoBoManager.ReturnIterations()[1];
             progressRoundText.text = "Round " + boManager.currentIteration + "/" + boManager.totalIterations;
-            progressRoundBar.value = currentLapProgressPercent / 100.0f;
+            
+            progressRoundBar.value = Mathf.Min(p1, p2) / 100.0f;
             
             // Temporary break condition for testing
             if (Input.GetKey(KeyCode.Backspace)) break; 
@@ -307,18 +414,38 @@ public class StudyController : MonoBehaviour
     public void StopRound()
     {
         activeConditionWindow.SetActive(true);
+        UpdateSteeringWheelState(true);
         car.GetComponent<Rigidbody>().isKinematic = true;
+        
+        if (isPairwiseMode && car2 != null)
+        {
+            car2.GetComponent<Rigidbody>().isKinematic = true;
+        }
     }
 
     private void RespawnCar()
     {
-        Rigidbody carRb = car.GetComponent<Rigidbody>();
-        RCC_CarControllerV4 rcc = car.GetComponent<RCC_CarControllerV4>();
-        DriveYourselfAgent agent = agentSelector.GetComponent<DriveYourselfAgent>();
+        ResetSingleCar(car);
+       
+        if (isPairwiseMode && car2 != null)
+        {
+            ResetSingleCar(car2);
+        }
+        
+        UpdateSteeringWheelState(false);
+    }
+
+    private void ResetSingleCar(GameObject targetCar)
+    {
+        Rigidbody carRb = targetCar.GetComponent<Rigidbody>();
+        RCC_CarControllerV4 rcc = targetCar.GetComponent<RCC_CarControllerV4>();
+        DriveYourselfAgent agent = targetCar.GetComponentInChildren<DriveYourselfAgent>();
+        GetVehicleData vData = targetCar.GetComponentInChildren<GetVehicleData>();
         
         agent.EndEpisode();
         carRb.isKinematic = true;
-        car.transform.SetPositionAndRotation(startingPosition.position, startingPosition.rotation);
+        
+        targetCar.transform.SetPositionAndRotation(startingPosition.position, startingPosition.rotation);
         Physics.SyncTransforms();
         carRb.isKinematic = false;
         carRb.Sleep();
@@ -336,11 +463,11 @@ public class StudyController : MonoBehaviour
             rcc.steerInput = 0f;
         }
 
-        if (vehicleData != null)
+        if (vData != null)
         {
-            vehicleData.ResetVars();
-            vehicleData.SyncDiscreteSegmentToSpline();
-            vehicleData.InitContinuousSplineState();
+            vData.ResetVars();
+            vData.SyncDiscreteSegmentToSpline();
+            vData.InitContinuousSplineState();
         }
     }
 
@@ -358,10 +485,17 @@ public class StudyController : MonoBehaviour
         studyDataHandler.LogRoundData(currentRound, agentSelector.CurrentLoadedModel, agentParams, feedback, transcript, audioFiles);
         
         boManager.optimizer.AddObjectiveValue("Comfort", feedback.likenessScore);
-        boManager.currentAdjustments["VehicleSpeed"] = (int)feedback.speedAdjustment;
-        boManager.currentAdjustments["VehicleDistanceToCenter"] = (int)feedback.dtcAdjustment;
-        boManager.currentAdjustments["VehicleMaxAcceleration"] = (int)feedback.accelAdjustment;
-        boManager.currentAdjustments["VehicleSmoothness"] = (int)feedback.smoothAdjustment;
+        if (feedback.speedAdjustment != ParameterAdjustment.Ignore) 
+            boManager.currentAdjustments["VehicleSpeed"] = (int)feedback.speedAdjustment;
+            
+        if (feedback.dtcAdjustment != ParameterAdjustment.Ignore) 
+            boManager.currentAdjustments["VehicleDistanceToCenter"] = (int)feedback.dtcAdjustment;
+            
+        if (feedback.accelAdjustment != ParameterAdjustment.Ignore) 
+            boManager.currentAdjustments["VehicleMaxAcceleration"] = (int)feedback.accelAdjustment;
+            
+        if (feedback.smoothAdjustment != ParameterAdjustment.Ignore) 
+            boManager.currentAdjustments["VehicleSmoothness"] = (int)feedback.smoothAdjustment;
         boManager.OptimizationStart();
         
         //demoBoManager.GetUserResponse(feedback);
@@ -374,10 +508,11 @@ public class StudyController : MonoBehaviour
         if (boManager.currentIteration >= boManager.totalIterations)
         {
             EndStudy();
-            yield return null;
+            yield break;
         }
         
-        ExtractAgentParameters();
+        yield return StartCoroutine(ExtractAgentParameters());
+        
         RespawnCar();
         StartCoroutine(CheckForFinishedLap());
     }
@@ -401,5 +536,27 @@ public class StudyController : MonoBehaviour
         
         StopAllCoroutines();
         this.enabled = false;
+    }
+    
+    private void SetLayerRecursivelyMapped(GameObject obj, Dictionary<int, int> layerMap)
+    {
+        if (layerMap.TryGetValue(obj.layer, out int newLayer))
+        {
+            obj.layer = newLayer;
+        }
+
+        foreach (Transform child in obj.transform)
+        {
+            SetLayerRecursivelyMapped(child.gameObject, layerMap);
+        }
+    }
+    
+    private void UpdateSteeringWheelState(bool stopMoving)
+    {
+        var steeringWheel = car.GetComponent<RCC_LogitechSteeringWheel>();
+        if (steeringWheel != null)
+        {
+            steeringWheel.TurnOffFFB = isPairwiseMode ? true : stopMoving;
+        }
     }
 }
