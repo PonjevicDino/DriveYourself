@@ -36,6 +36,7 @@ namespace BOforUnity
         public bool initialized = false;
         public bool simulationRunning = false;
         private bool _waitingForPythonProcess = false;
+        public bool holdInitialization = true;
         
         // BO Hyper-parameters
         public int batchSize = 1;
@@ -57,6 +58,8 @@ namespace BOforUnity
         public string userId = "-1";
         public string conditionId = "-1";
         public string groupId = "-1";
+        
+        public List<Dictionary<string, float>> discreteChoices = new List<Dictionary<string, float>>();
 
         public bool hasNewDesignParameterValues;
         //-----------------------------------------------
@@ -94,7 +97,7 @@ namespace BOforUnity
         
         void Update()
         {
-            if (_waitingForPythonProcess && pythonStarter.isPythonProcessRunning && pythonStarter.isSystemStarted)
+            if (!holdInitialization && _waitingForPythonProcess && pythonStarter.isPythonProcessRunning && pythonStarter.isSystemStarted)
             {
                 _waitingForPythonProcess = false;
                 PythonInitializationDone();

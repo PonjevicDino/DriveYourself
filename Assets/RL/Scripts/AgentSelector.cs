@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Unity.MLAgents.Policies;
 using System.Text.RegularExpressions;
@@ -226,5 +227,37 @@ public class AgentSelector : MonoBehaviour
             float totalFrames = fileSmooth * physicsFps;
             agent.inputSmoothnessThreshold = fullRange / totalFrames;
         }
+    }
+    
+    public void ExtractAvailableAgentsForOptimizer(BOforUnity.BoForUnityManager boManager)
+    {
+        boManager.discreteChoices.Clear();
+        
+        if (availableModels == null || availableModels.Length == 0)
+        {
+            Debug.LogError("AgentSelector: No models found! Cannot pass discrete choices to BO.");
+            return;
+        }
+
+        string pattern = @"Agent_(\d+)-S(\d+)-W(\d+)-A(\d+)-Sm(\d+)";
+        Regex regex = new Regex(pattern);
+
+        foreach (var model in availableModels)
+        {
+            Match match = regex.Match(model.name);
+            if (match.Success)
+            {
+                Dictionary<string, float> agentParams = new Dictionary<string, float>
+                {
+                    { "VehicleSpeed", float.Parse(match.Groups[2].Value) },
+                    { "VehicleDistanceToCenter", float.Parse(match.Groups[3].Value) },
+                    { "VehicleMaxAcceleration", float.Parse(match.Groups[4].Value) },
+                    { "VehicleSmoothness", float.Parse(match.Groups[5].Value) }
+                };
+                
+                boManager.discreteChoices.Add(agentParams);
+            }
+        }
+        Debug.Log($"Extracted {boManager.discreteChoices.Count} discrete agents for the optimizer pool.");
     }
 }

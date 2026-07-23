@@ -97,7 +97,7 @@ public class StudyDataHandler : MonoBehaviour
 
             likenessScore = feedback.likenessScore,
             llmLikenessScore = feedback.llmLikenessScore,
-            
+            responseTime = feedback.responseTime,
             speedAdjustment = (int)feedback.speedAdjustment,
             dtcAdjustment = (int)feedback.dtcAdjustment,
             accAdjustment = (int)feedback.accelAdjustment,
@@ -180,6 +180,7 @@ public class RoundData
     [Header("User Feedback")]
     public float likenessScore;
     public float llmLikenessScore;
+    public float responseTime;
     public int speedAdjustment;
     public int dtcAdjustment;
     public int accAdjustment;

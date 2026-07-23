@@ -7,7 +7,9 @@ public class StudyControllerConditionB : MonoBehaviour
 {
     [SerializeField] private StudyController studyController;
     [SerializeField] private Slider feedbackSlider;
-    [SerializeField] private FeedbackButtonSelector buttonSelector;
+    
+    [SerializeField] private FeedbackButtonSelector ratingScreenButtonSelector;
+    [SerializeField] private FeedbackButtonSelector inGameButtonSelector;
     
     [SerializeField] private GameObject page0;
     [SerializeField] private TextMeshProUGUI page0Title;
@@ -19,20 +21,28 @@ public class StudyControllerConditionB : MonoBehaviour
         StudyController.AgentFeedback feedback = new StudyController.AgentFeedback
         {
             likenessScore = feedbackSlider.value,
-            speedAdjustment = (StudyController.ParameterAdjustment)buttonSelector.SelectedSpeed,
-            dtcAdjustment = (StudyController.ParameterAdjustment)buttonSelector.SelectedDtC,
-            accelAdjustment = (StudyController.ParameterAdjustment)buttonSelector.SelectedAcc,
-            smoothAdjustment = (StudyController.ParameterAdjustment)buttonSelector.SelectedSmoothness
+            speedAdjustment = (StudyController.ParameterAdjustment)ratingScreenButtonSelector.SelectedSpeed,
+            dtcAdjustment = (StudyController.ParameterAdjustment)ratingScreenButtonSelector.SelectedDtC,
+            accelAdjustment = (StudyController.ParameterAdjustment)ratingScreenButtonSelector.SelectedAcc,
+            smoothAdjustment = (StudyController.ParameterAdjustment)ratingScreenButtonSelector.SelectedSmoothness
         };
 
         studyController.SubmitFeedback(feedback);
         feedbackSlider.value = 0.5f;
-        buttonSelector.Reset();
+        ratingScreenButtonSelector.Reset();
+        inGameButtonSelector.Reset();
         
         if (EventSystem.current != null)
         {
             EventSystem.current.SetSelectedGameObject(null);
         }
+        
+        inGameButtonSelector.gameObject.SetActive(true);
+    }
+    
+    public void OnClearButtonClicked()
+    {
+        ratingScreenButtonSelector.Reset();
     }
     
     public void Update()
@@ -58,7 +68,23 @@ public class StudyControllerConditionB : MonoBehaviour
     public void OnEnable()
     {
         page0Title.text = "DriveYourself - ID " + studyController.participantID + " - Condition B";
-        //page1Title.text = "Feedback for previous Driving Style: " + studyController.demoBoManager.ReturnIterations()[0] + "/" + studyController.demoBoManager.ReturnIterations()[1];
         page1Title.text = "Feedback for previous Driving Style: " + studyController.boManager.currentIteration + "/" + studyController.boManager.totalIterations;
+
+        if (inGameButtonSelector != null && ratingScreenButtonSelector != null && page1.activeSelf)
+        {
+            ratingScreenButtonSelector.SyncState(
+                inGameButtonSelector.SelectedSpeed,
+                inGameButtonSelector.SelectedDtC,
+                inGameButtonSelector.SelectedAcc,
+                inGameButtonSelector.SelectedSmoothness
+            );
+        }
+        
+        inGameButtonSelector.gameObject.SetActive(false);
+    }
+
+    void Start()
+    {
+        inGameButtonSelector.gameObject.SetActive(true);
     }
 }

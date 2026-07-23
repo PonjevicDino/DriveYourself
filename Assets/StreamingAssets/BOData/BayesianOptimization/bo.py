@@ -19,6 +19,7 @@ from botorch.acquisition.logei import qLogNoisyExpectedImprovement  # LogNEI
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_mll
 from botorch.optim.optimize import optimize_acqf
+from botorch.optim.optimize import optimize_acqf_discrete
 from botorch.sampling.normal import SobolQMCNormalSampler
 from botorch.utils.sampling import draw_sobol_samples
 from gpytorch.mlls import ExactMarginalLogLikelihood
@@ -74,6 +75,7 @@ parameter_names = []
 objective_names = []
 parameters_info = []   # [(lo, hi)]
 objectives_info = []   # [(lo, hi, minimizeFlag)]  # minimizeFlag==1 means minimize in original scale
+discrete_choices_tensor = None
 
 # device
 tkwargs = {"dtype": torch.double, "device": torch.device("cpu")}
@@ -238,7 +240,7 @@ def objective_function(conn, x_tensor):
 
 # -------------------- data IO --------------------
 def generate_initial_data(conn, n_samples):
-    global PROJECT_PATH
+    global PROJECT_PATH, discrete_choices_tensor
     obs_csv = os.path.join(PROJECT_PATH, "ObservationsPerEvaluation.csv")
     if not os.path.exists(obs_csv):
         # NOTE: 'IsBest' replaces 'IsPareto'
@@ -246,8 +248,18 @@ def generate_initial_data(conn, n_samples):
         with open(obs_csv, 'w', newline='') as f:
             csv.writer(f, delimiter=';').writerow(header)
 
-    train_x = draw_sobol_samples(bounds=problem_bounds, n=1, q=n_samples, seed=SEED).squeeze(0)
-    print("Initial Sobol X in [0,1]:", train_x, flush=True)
+    if len(discrete_choices_tensor) < n_samples:
+        raise RuntimeError(
+            f"Not enough discrete agents ({len(discrete_choices_tensor)}) for initial samples ({n_samples})")
+
+    idx = torch.randperm(len(discrete_choices_tensor))[:n_samples]
+    train_x = discrete_choices_tensor[idx]
+
+    keep_mask = torch.ones(len(discrete_choices_tensor), dtype=torch.bool)
+    keep_mask[idx] = False
+    discrete_choices_tensor = discrete_choices_tensor[keep_mask]
+
+    print("Initial Discrete X in [0,1]:", train_x, flush=True)
 
     train_obj = []
     best_so_far = -1e9
@@ -291,8 +303,12 @@ def initialize_model(train_x, train_obj):
     mll = ExactMarginalLogLikelihood(model.likelihood, model)
     return mll, model
 
-# -------------------- acquisition (single-objective, LogNEI) --------------------
+# -------------------- acquisition (Discrete, LogNEI) --------------------
 def optimize_candidates(model, sampler):
+    global discrete_choices_tensor
+    if len(discrete_choices_tensor) == 0:
+        raise RuntimeError("No discrete agents left in the pool to evaluate!")
+
     X_baseline = model.train_inputs[0]
     if X_baseline.dim() == 3:
         X_baseline = X_baseline[0]
@@ -303,14 +319,11 @@ def optimize_candidates(model, sampler):
         # tau=1e-3,  # optional smoothing
     )
     acq = PriorWeightedAcquisition(base_acq, active_priors) if active_priors else base_acq
-    candidates, _ = optimize_acqf(
+    candidates, _ = optimize_acqf_discrete(
         acq_function=acq,
-        bounds=problem_bounds,
         q=BATCH_SIZE,
-        num_restarts=NUM_RESTARTS,
-        raw_samples=RAW_SAMPLES,
-        options={"batch_limit": 5, "maxiter": 200},
-        sequential=True,
+        choices=discrete_choices_tensor,
+        unique=True
     )
     return candidates.detach()  # in [0,1]
 
@@ -363,7 +376,7 @@ def save_metric_to_file(metric_values, iteration):
 
 # -------------------- main loop --------------------
 def bo_execute(conn, seed, iterations, initial_samples):
-    global PROJECT_PATH, OBSERVATIONS_LOG_PATH
+    global PROJECT_PATH, OBSERVATIONS_LOG_PATH, discrete_choices_tensor
     base = os.path.join(os.getcwd(), "LogData")
     os.makedirs(base, exist_ok=True)
     PROJECT_PATH = get_unique_folder(base, USER_ID)
@@ -397,6 +410,10 @@ def bo_execute(conn, seed, iterations, initial_samples):
         write_data_to_csv(exec_csv, ['Optimization', 'Execution_Time'],
                           [{'Optimization': it, 'Execution_Time': t_elapsed}])
 
+        for nx in new_x:
+            mask = ~torch.all(torch.isclose(discrete_choices_tensor, nx, atol=1e-5), dim=1)
+            discrete_choices_tensor = discrete_choices_tensor[mask]
+
         new_y, new_adjs = objective_function(conn, new_x[0])
         train_x = torch.cat([train_x, new_x])
         train_y = torch.cat([train_y, new_y.unsqueeze(0)])  # shape [n+1,1]
@@ -420,7 +437,7 @@ def main():
     global WARM_START, CSV_PATH_PARAMETERS, CSV_PATH_OBJECTIVES
     global USER_ID, CONDITION_ID, GROUP_ID
     global parameter_names, objective_names, parameters_info, objectives_info
-    global param_space
+    global param_space, discrete_choices_tensor
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((HOST, PORT))
@@ -450,11 +467,6 @@ def main():
     PROBLEM_DIM    = int(cfg.get("nParameters"))
     NUM_OBJS       = int(cfg.get("nObjectives"))
     WARM_START     = bool(cfg.get("warmStart", False))
-    CSV_PATH_PARAMETERS = str(cfg.get("initialParametersDataPath") or "")
-    CSV_PATH_OBJECTIVES = str(cfg.get("initialObjectivesDataPath") or "")
-
-    if NUM_OBJS != 1:
-        raise ValueError(f"bo.py expects exactly 1 objective, got {NUM_OBJS}")
 
     user = init_msg.get("user", {}) or {}
     USER_ID      = str(user.get("userId", "user"))
@@ -466,11 +478,6 @@ def main():
 
     parameter_names = [p.get("key") for p in parameters]
     objective_names = [o.get("key") for o in objectives]
-
-    if len(parameter_names) != PROBLEM_DIM:
-        raise ValueError(f"parameter_names len {len(parameter_names)} != nParameters {PROBLEM_DIM}")
-    if len(objective_names) != NUM_OBJS:
-        raise ValueError(f"objective_names len {len(objective_names)} != nObjectives {NUM_OBJS}")
 
     parameters_info = [parse_param_init(p.get("init")) for p in parameters]
     objectives_info = [parse_obj_init(o.get("init")) for o in objectives]
@@ -486,6 +493,21 @@ def main():
         (parameter_names[i], parameters_info[i][0], parameters_info[i][1])
         for i in range(PROBLEM_DIM)
     ])
+
+    raw_choices = init_msg.get("discreteChoices", [])
+    if not raw_choices:
+        raise RuntimeError("No 'discreteChoices' array provided in init message!")
+
+    norm_choices = []
+    for rc in raw_choices:
+        nc = []
+        for i, name in enumerate(parameter_names):
+            val = float(rc.get(name, 0.0))
+            nc.append(param_space._norm(i, val))
+        norm_choices.append(nc)
+
+    discrete_choices_tensor = torch.tensor(norm_choices, dtype=torch.double, device=device)
+    print(f"Loaded {len(discrete_choices_tensor)} unique discrete agents into the pool.", flush=True)
 
     print("Init OK:", dict(
         BATCH_SIZE=BATCH_SIZE, NUM_RESTARTS=NUM_RESTARTS, RAW_SAMPLES=RAW_SAMPLES,

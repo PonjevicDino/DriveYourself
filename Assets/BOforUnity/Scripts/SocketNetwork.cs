@@ -24,6 +24,7 @@ namespace BOforUnity.Scripts
         public List<ParamInfo> parameters;
         public List<ObjInfo> objectives;
         public UserInfo user;
+        public List<Dictionary<string, float>> discreteChoices;
     }
 
     [Serializable] class InitConfig
@@ -347,7 +348,8 @@ namespace BOforUnity.Scripts
                     userId = _bomanager.userId,
                     conditionId = _bomanager.conditionId,
                     groupId = _bomanager.groupId
-                }
+                },
+                discreteChoices = _bomanager.discreteChoices
             };
 
             string json = JsonConvert.SerializeObject(init, JsonSettings);

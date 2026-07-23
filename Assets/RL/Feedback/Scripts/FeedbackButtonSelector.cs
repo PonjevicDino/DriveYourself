@@ -10,22 +10,30 @@ public class FeedbackButtonSelector : MonoBehaviour
     [SerializeField] private List<GameObject> accButtons;
     [SerializeField] private List<GameObject> smoothButtons;
 
-    private int selectedSpeed = 0;
-    private int selectedDtC = 0;
-    private int selectedAcc = 0;
-    private int selectedSmoothness = 0;
+    private int selectedSpeed = -999;
+    private int selectedDtC = -999;
+    private int selectedAcc = -999;
+    private int selectedSmoothness = -999;
     
     public int SelectedSpeed => selectedSpeed;
     public int SelectedDtC => selectedDtC;
     public int SelectedAcc => selectedAcc;
     public int SelectedSmoothness => selectedSmoothness;
+    
+    public void SyncState(int speed, int dtc, int acc, int smooth)
+    {
+        RadioButtonSelector("speed", speed);
+        RadioButtonSelector("dtc", dtc);
+        RadioButtonSelector("acc", acc);
+        RadioButtonSelector("smooth", smooth);
+    }
 
     public void Reset()
     {
-        selectedSpeed = 0;
-        selectedDtC = 0;
-        selectedAcc = 0;
-        selectedSmoothness = 0;
+        selectedSpeed = -999;
+        selectedDtC = -999;
+        selectedAcc = -999;
+        selectedSmoothness = -999;
         
         ClearButtonColors(speedButtons);
         ClearButtonColors(dtcButtons);
@@ -66,7 +74,6 @@ public class FeedbackButtonSelector : MonoBehaviour
     public void SelectSmoothnessSlightlyMore() => RadioButtonSelector("smooth", 1);
     public void SelectSmoothnessMuchMore() => RadioButtonSelector("smooth", 2);
 
-    
     private void RadioButtonSelector(string type, int value)
     {
         List<GameObject> targetList = null;
@@ -96,6 +103,8 @@ public class FeedbackButtonSelector : MonoBehaviour
         {
             button.GetComponent<Image>().color = Color.white;
         }
+        
+        if (value == -999) return;
 
         int index = value + 2; 
         if (index >= 0 && index < targetList.Count) 

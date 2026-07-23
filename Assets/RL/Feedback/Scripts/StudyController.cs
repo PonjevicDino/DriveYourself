@@ -34,6 +34,7 @@ public class StudyController : MonoBehaviour
     [SerializeField] private GameObject conditionCWindow;
     [SerializeField] private GameObject conditionDWindow;
     [SerializeField] private GameObject progressWindow;
+    [SerializeField] private GameObject loadingScreen;
     private GameObject introWindow;
     private GameObject activeConditionWindow;
     
@@ -69,6 +70,7 @@ public class StudyController : MonoBehaviour
     private int prevSmooth = 5;
     
     private float ctrlHoldTimer = 0f;
+    private float roundStopTime = 0f;
     
     public enum ParameterAdjustment 
     {
@@ -88,6 +90,7 @@ public class StudyController : MonoBehaviour
         public ParameterAdjustment dtcAdjustment;
         public ParameterAdjustment accelAdjustment;
         public ParameterAdjustment smoothAdjustment;
+        public float responseTime;
     }
     
     private void Awake()
@@ -115,6 +118,7 @@ public class StudyController : MonoBehaviour
         
         RespawnCar();
         car.GetComponent<Rigidbody>().isKinematic = true;
+        loadingScreen.SetActive(false);
         startupWindow.SetActive(true);
         conditionAWindow.SetActive(false);
         conditionBWindow.SetActive(false);
@@ -230,8 +234,14 @@ public class StudyController : MonoBehaviour
         PlayerPrefs.SetInt("ActiveLLMProvider", llmProviderDropdown.value);
         PlayerPrefs.Save();
         
+        agentSelector.ExtractAvailableAgentsForOptimizer(boManager);
+        
         studyDataHandler.StartCondition(participantID, condition);
         startupWindow.SetActive(false);
+        
+        boManager.userId = participantID;
+        boManager.conditionId = condition;
+        boManager.holdInitialization = false;
         
         isPairwiseMode = (condition == "D");
         if (isPairwiseMode)
@@ -421,6 +431,8 @@ public class StudyController : MonoBehaviour
         {
             car2.GetComponent<Rigidbody>().isKinematic = true;
         }
+        
+        roundStopTime = Time.realtimeSinceStartup;
     }
 
     private void RespawnCar()
@@ -473,6 +485,7 @@ public class StudyController : MonoBehaviour
 
     public void SubmitFeedback(AgentFeedback userFeedback, String transcript = null, List<string> audioFiles = null)
     {
+        userFeedback.responseTime = Time.realtimeSinceStartup - roundStopTime;
         activeConditionWindow.SetActive(false);
         StartCoroutine(ProcessFeedbackSequence(userFeedback, transcript, audioFiles));
     }
@@ -484,7 +497,7 @@ public class StudyController : MonoBehaviour
         int currentRound = boManager.currentIteration;
         studyDataHandler.LogRoundData(currentRound, agentSelector.CurrentLoadedModel, agentParams, feedback, transcript, audioFiles);
         
-        boManager.optimizer.AddObjectiveValue("Comfort", feedback.likenessScore);
+        boManager.optimizer.AddObjectiveValue("Likeness", feedback.likenessScore);
         if (feedback.speedAdjustment != ParameterAdjustment.Ignore) 
             boManager.currentAdjustments["VehicleSpeed"] = (int)feedback.speedAdjustment;
             
@@ -498,11 +511,15 @@ public class StudyController : MonoBehaviour
             boManager.currentAdjustments["VehicleSmoothness"] = (int)feedback.smoothAdjustment;
         boManager.OptimizationStart();
         
+        loadingScreen.SetActive(true);
+        
         //demoBoManager.GetUserResponse(feedback);
         //yield return new WaitUntil(() => demoBoManager.hasNextParameterValue);
         //demoBoManager.hasNextParameterValue = false;
         yield return new WaitUntil(() => boManager.hasNewDesignParameterValues);
         boManager.hasNewDesignParameterValues = false;
+        
+        loadingScreen.SetActive(false);
 
         //if (demoBoManager.ReturnIterations()[0] >= demoBoManager.ReturnIterations()[1])
         if (boManager.currentIteration >= boManager.totalIterations)
