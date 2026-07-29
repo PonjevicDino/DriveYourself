@@ -337,6 +337,7 @@ public class RCC_LogitechSteeringWheel : MonoBehaviour
     [HideInInspector]
     public float steerInput = 0.0f;
     public bool TurnOffFFB = false;
+    [SerializeField, Range(0.0f, 1.0f)] private float espAbsFactor = 1.0f; 
 
     void Start()
     {
@@ -447,8 +448,8 @@ public class RCC_LogitechSteeringWheel : MonoBehaviour
             LogitechGSDK.LogiStopSpringForce(0);
             LogitechGSDK.LogiStopDamperForce(0);
             LogitechGSDK.LogiStopConstantForce(0);
-            LogitechGSDK.LogiPlaySurfaceEffect(0, LogitechGSDK.LOGI_PERIODICTYPE_SQUARE, absFFB, 100);
-            LogitechGSDK.LogiPlayConstantForce(0, (int) (100 * Random.Range(-1.0f, 1.0f)));
+            LogitechGSDK.LogiPlaySurfaceEffect(0, LogitechGSDK.LOGI_PERIODICTYPE_SQUARE, Mathf.CeilToInt(absFFB * espAbsFactor), 100);
+            LogitechGSDK.LogiPlayConstantForce(0, (int) (100 * Random.Range(-1.0f, 1.0f) * espAbsFactor));
             //DIManager.UpdateConstantForceSimple(ISDevice.description.serial, absFFB);
             //Debug.Log("ABS FFB: " + absFFB);
         }
@@ -463,8 +464,8 @@ public class RCC_LogitechSteeringWheel : MonoBehaviour
             LogitechGSDK.LogiPlayConstantForce(0, espFFB);
             //DIManager.UpdateConstantForceSimple(ISDevice.description.serial, espFFB);
 
-            LogitechGSDK.LogiPlayDirtRoadEffect(0, Mathf.CeilToInt(Mathf.Abs(playerVehicle.speed)));
-            LogitechGSDK.LogiPlaySurfaceEffect(0, LogitechGSDK.LOGI_PERIODICTYPE_TRIANGLE, Mathf.CeilToInt(Mathf.Abs(playerVehicle.speed)), 20);
+            LogitechGSDK.LogiPlayDirtRoadEffect(0, Mathf.CeilToInt(Mathf.Abs(playerVehicle.speed) * espAbsFactor));
+            LogitechGSDK.LogiPlaySurfaceEffect(0, LogitechGSDK.LOGI_PERIODICTYPE_TRIANGLE, Mathf.CeilToInt(Mathf.Abs(playerVehicle.speed) * espAbsFactor), 20);
             //DIManager.UpdateSpringSimple(ISDevice.description.serial, 10000, 0, Mathf.CeilToInt(5000 * (Mathf.Abs(playerVehicle.speed) / 100)), Mathf.CeilToInt(5000 * (Mathf.Abs(playerVehicle.speed) / 100)), 0, 0);
 
             //Debug.Log("ESP FFB: " + espFFB);

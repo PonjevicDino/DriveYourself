@@ -22,7 +22,6 @@ public class CarMotionController : MonoBehaviour
 {
     // Vehicle body object
     private Rigidbody m_Rigidbody;
-    [SerializeField] private float force;
 
     private RCC_CarControllerV4 carController;
 
@@ -30,6 +29,8 @@ public class CarMotionController : MonoBehaviour
     private ForceSeatMI_Unity m_Api;
     private ForceSeatMI_Vehicle m_vehicle;
     private ForceSeatMI_Unity.ExtraParameters m_extraParameters;
+    
+    [SerializeField] private bool electicCar = false;
 
     private void Start()
     {
@@ -70,8 +71,16 @@ public class CarMotionController : MonoBehaviour
             // Use extra parameters to generate custom effects, for exmp. vibrations. They will NOT be
             // filtered, smoothed or processed in any way.
             m_extraParameters.yaw = 0;
-            m_extraParameters.pitch = (float)Math.Sin(Time.fixedTime * MathF.Floor(carController.engineRPM)) * 0.00015f * ((carController.maxEngineRPM - carController.engineRPM) / carController.maxEngineRPM);
-            m_extraParameters.roll = (float)Math.Sin(Time.fixedTime * MathF.Floor(carController.engineRPM)) * 0.00015f * ((carController.maxEngineRPM - carController.engineRPM) / carController.maxEngineRPM);
+            if (electicCar)
+            {
+                m_extraParameters.pitch = 0;
+                m_extraParameters.roll = 0;
+            }
+            else
+            {
+                m_extraParameters.pitch = (float)Math.Sin(Time.fixedTime * MathF.Floor(carController.engineRPM)) * 0.00015f * ((carController.maxEngineRPM - carController.engineRPM) / carController.maxEngineRPM);
+                m_extraParameters.roll = (float)Math.Sin(Time.fixedTime * MathF.Floor(carController.engineRPM)) * 0.00015f * ((carController.maxEngineRPM - carController.engineRPM) / carController.maxEngineRPM);
+            }
             m_extraParameters.right = 0;
             m_extraParameters.up = 0;
             m_extraParameters.forward = 0;

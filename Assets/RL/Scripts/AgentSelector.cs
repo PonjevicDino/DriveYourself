@@ -242,6 +242,8 @@ public class AgentSelector : MonoBehaviour
         string pattern = @"Agent_(\d+)-S(\d+)-W(\d+)-A(\d+)-Sm(\d+)";
         Regex regex = new Regex(pattern);
 
+        Debug.Log($"=== Start extracting {availableModels.Length} discrete agents for the optimizer pool.");
+        
         foreach (var model in availableModels)
         {
             Match match = regex.Match(model.name);
@@ -256,8 +258,11 @@ public class AgentSelector : MonoBehaviour
                 };
                 
                 boManager.discreteChoices.Add(agentParams);
+                
+                Debug.Log(model.name + ": Speed-" + agentParams["VehicleSpeed"] + ", DtC-" + agentParams["VehicleDistanceToCenter"] + ", Acc-" + agentParams["VehicleMaxAcceleration"] + ", Smooth-" + agentParams["VehicleSmoothness"]);
             }
         }
-        Debug.Log($"Extracted {boManager.discreteChoices.Count} discrete agents for the optimizer pool.");
+        
+        Debug.Log($"=== Extracted {boManager.discreteChoices.Count} discrete agents for the optimizer pool.");
     }
 }

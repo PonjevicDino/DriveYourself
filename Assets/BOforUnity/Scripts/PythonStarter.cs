@@ -110,7 +110,7 @@ namespace BOforUnity.Scripts
             pythonProcess.StartInfo.WorkingDirectory = Path.Combine(Application.streamingAssetsPath, "BOData");
             
             pythonProcess.StartInfo.UseShellExecute = false;
-            pythonProcess.StartInfo.CreateNoWindow = true;
+            pythonProcess.StartInfo.CreateNoWindow = false;
             pythonProcess.StartInfo.RedirectStandardOutput = true;
             pythonProcess.StartInfo.RedirectStandardError = true;
             pythonProcess.EnableRaisingEvents = true;

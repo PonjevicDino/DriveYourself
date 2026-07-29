@@ -505,7 +505,7 @@ public class StudyController : MonoBehaviour
             boManager.currentAdjustments["VehicleDistanceToCenter"] = (int)feedback.dtcAdjustment;
             
         if (feedback.accelAdjustment != ParameterAdjustment.Ignore) 
-            boManager.currentAdjustments["VehicleMaxAcceleration"] = (int)feedback.accelAdjustment;
+            boManager.currentAdjustments["VehicleMaxAcceleration"] = -(int)feedback.accelAdjustment;
             
         if (feedback.smoothAdjustment != ParameterAdjustment.Ignore) 
             boManager.currentAdjustments["VehicleSmoothness"] = (int)feedback.smoothAdjustment;
@@ -522,7 +522,7 @@ public class StudyController : MonoBehaviour
         loadingScreen.SetActive(false);
 
         //if (demoBoManager.ReturnIterations()[0] >= demoBoManager.ReturnIterations()[1])
-        if (boManager.currentIteration >= boManager.totalIterations)
+        if (boManager.currentIteration > boManager.totalIterations)
         {
             EndStudy();
             yield break;

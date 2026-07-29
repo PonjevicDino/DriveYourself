@@ -13,18 +13,34 @@ import csv
 import numpy as np
 import pandas as pd
 import torch
+import concurrent.futures
 
 from botorch.acquisition import AcquisitionFunction
 from botorch.acquisition.logei import qLogNoisyExpectedImprovement  # LogNEI
+from botorch.acquisition.max_value_entropy_search import qMaxValueEntropy, qLowerBoundMaxValueEntropy
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_mll
-from botorch.optim.optimize import optimize_acqf
 from botorch.optim.optimize import optimize_acqf_discrete
 from botorch.sampling.normal import SobolQMCNormalSampler
 from botorch.utils.sampling import draw_sobol_samples
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
 from parameter_priors import ParameterSpace, ParameterPrior
+
+class PrintLogger:
+    def __init__(self, filepath):
+        self.terminal = sys.stdout
+        self.log = open(filepath, "a", encoding="utf-8")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
 
 class PriorWeightedAcquisition(AcquisitionFunction):
     def __init__(self, base_acq: AcquisitionFunction, priors: list[ParameterPrior]) -> None:
@@ -186,17 +202,17 @@ def update_priors(x_tensor, adjs):
             lo, hi = parameters_info[i]
             x_val = denormalize_to_original_param(x_np[i], lo, hi)
             span = hi - lo
-
+            eps = span * 0.001
             if adj <= -2:  # Much Less
-                new_priors.append(param_space.soft_bound(name, low=lo, high=max(lo, x_val - 0.1 * span)))
+                new_priors.append(param_space.soft_bound(name, low=lo, high=max(lo + eps, x_val - 0.1 * span)))
             elif adj == -1:  # Slightly Less
-                new_priors.append(param_space.soft_bound(name, low=lo, high=x_val))
+                new_priors.append(param_space.soft_bound(name, low=lo, high=max(lo + eps, x_val)))
             elif adj == 0:  # Keep
                 new_priors.append(param_space.gaussian(name, mean=x_val, std=span * 0.05))
             elif adj == 1:  # Slightly More
-                new_priors.append(param_space.soft_bound(name, low=x_val, high=hi))
+                new_priors.append(param_space.soft_bound(name, low=min(hi - eps, x_val), high=hi))
             elif adj >= 2:  # Much More
-                new_priors.append(param_space.soft_bound(name, low=min(hi, x_val + 0.1 * span), high=hi))
+                new_priors.append(param_space.soft_bound(name, low=min(hi - eps, x_val + 0.1 * span), high=hi))
 
     active_priors = new_priors
     print(f"-> Updated {len(active_priors)} preference priors based on user feedback.", flush=True)
@@ -244,7 +260,9 @@ def generate_initial_data(conn, n_samples):
     obs_csv = os.path.join(PROJECT_PATH, "ObservationsPerEvaluation.csv")
     if not os.path.exists(obs_csv):
         # NOTE: 'IsBest' replaces 'IsPareto'
-        header = ['UserID','ConditionID','GroupID','Timestamp','Iteration','Phase','IsBest'] + objective_names + parameter_names
+        header = ['UserID', 'ConditionID', 'GroupID', 'Timestamp', 'Iteration', 'Phase', 'IsBest',
+                  'PosteriorMean', 'PosteriorVariance', 'AcqValue', 'MES_Value',
+                  'GIBBON_Value'] + objective_names + parameter_names
         with open(obs_csv, 'w', newline='') as f:
             csv.writer(f, delimiter=';').writerow(header)
 
@@ -282,7 +300,7 @@ def generate_initial_data(conn, n_samples):
 
         row = [USER_ID, CONDITION_ID, GROUP_ID,
                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-               i+1, 'sampling', 'TRUE' if is_best else 'FALSE', y_den, *x_den]
+               i+1, 'sampling', 'TRUE' if is_best else 'FALSE',"", "", "", "", "", y_den, *x_den]
         with open(obs_csv, 'a', newline='') as f:
             csv.writer(f, delimiter=';').writerow(row)
 
@@ -319,16 +337,46 @@ def optimize_candidates(model, sampler):
         # tau=1e-3,  # optional smoothing
     )
     acq = PriorWeightedAcquisition(base_acq, active_priors) if active_priors else base_acq
-    candidates, _ = optimize_acqf_discrete(
+    candidates, acq_value = optimize_acqf_discrete(
         acq_function=acq,
         q=BATCH_SIZE,
         choices=discrete_choices_tensor,
         unique=True
     )
-    return candidates.detach()  # in [0,1]
+
+    with torch.no_grad():
+        posterior = model.posterior(candidates)
+        mean_val = posterior.mean.item()
+        var_val = posterior.variance.item()
+
+    def calculate_entropies():
+        mes, gibbon = "", ""
+        try:
+            mes_acq = qMaxValueEntropy(model, candidate_set=discrete_choices_tensor)
+            mes = mes_acq(candidates.unsqueeze(0)).item()
+        except Exception as e:
+            print(f"MES Error: {e}", flush=True)
+
+        try:
+            gibbon_acq = qLowerBoundMaxValueEntropy(model, candidate_set=discrete_choices_tensor)
+            gibbon = gibbon_acq(candidates.unsqueeze(0)).item()
+        except Exception as e:
+            print(f"GIBBON Error: {e}", flush=True)
+
+        return mes, gibbon
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(calculate_entropies)
+        try:
+            mes_val, gibbon_val = future.result(timeout=15.0)
+        except concurrent.futures.TimeoutError:
+            print("MES/GIBBON calculation timed out. Proceeding to next round...", flush=True)
+            mes_val, gibbon_val = "Timeout", "Timeout"
+
+    return candidates.detach(), mean_val, var_val, acq_value.item(), mes_val, gibbon_val
 
 # -------------------- logging --------------------
-def save_xy(x_sample, y_sample, iteration):
+def save_xy(x_sample, y_sample, iteration, mean_val, var_val, acq_val, mes_val, gibbon_val):
     # Reuse ObservationsPerEvaluation.csv with 'IsBest'
     obs_csv = os.path.join(PROJECT_PATH, "ObservationsPerEvaluation.csv")
     x_np = x_sample.clone().cpu().numpy()
@@ -342,12 +390,15 @@ def save_xy(x_sample, y_sample, iteration):
     if os.path.exists(obs_csv):
         df = pd.read_csv(obs_csv, delimiter=';')
     else:
-        cols = ['UserID','ConditionID','GroupID','Timestamp','Iteration','Phase','IsBest'] + objective_names + parameter_names
+        cols = ['UserID', 'ConditionID', 'GroupID', 'Timestamp', 'Iteration', 'Phase', 'IsBest',
+                'PosteriorMean', 'PosteriorVariance', 'AcqValue', 'MES_Value',
+                'GIBBON_Value'] + objective_names + parameter_names
         df = pd.DataFrame(columns=cols)
 
     new_row = pd.DataFrame([[USER_ID, CONDITION_ID, GROUP_ID,
                              time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                              iteration + N_INITIAL, 'optimization', 'FALSE',
+                             mean_val, var_val, acq_val, mes_val, gibbon_val,
                              y_np[-1][0], *x_np[-1]]], columns=df.columns)
     df = pd.concat([df, new_row], ignore_index=True)
 
@@ -382,6 +433,12 @@ def bo_execute(conn, seed, iterations, initial_samples):
     PROJECT_PATH = get_unique_folder(base, USER_ID)
     OBSERVATIONS_LOG_PATH = os.path.join(PROJECT_PATH, "ObservationsPerEvaluation.csv")
 
+    log_file_path = os.path.join(PROJECT_PATH, "PythonConsoleLog.txt")
+    sys.stdout = PrintLogger(log_file_path)
+    sys.stderr = sys.stdout
+
+    print(f"Logging started for User: {USER_ID} | Condition: {CONDITION_ID}", flush=True)
+
     exec_csv = os.path.join(PROJECT_PATH, 'ExecutionTimes.csv')
     create_csv_file(exec_csv, ['Optimization', 'Execution_Time'])
 
@@ -405,7 +462,7 @@ def bo_execute(conn, seed, iterations, initial_samples):
     for it in range(1, iterations + 1):
         t0 = time.time()
         fit_gpytorch_mll(mll)
-        new_x = optimize_candidates(model, sampler)
+        new_x, mean_val, var_val, acq_val, mes_val, gibbon_val = optimize_candidates(model, sampler)
         t_elapsed = time.time() - t0
         write_data_to_csv(exec_csv, ['Optimization', 'Execution_Time'],
                           [{'Optimization': it, 'Execution_Time': t_elapsed}])
@@ -421,7 +478,7 @@ def bo_execute(conn, seed, iterations, initial_samples):
 
         best = torch.max(train_y).item()
         metric_values.append(best)
-        save_xy(train_x, train_y, it)
+        save_xy(train_x, train_y, it, mean_val, var_val, acq_val, mes_val, gibbon_val)
         save_metric_to_file(metric_values, it)
         send_json_line(conn, {"type": "coverage", "value": float(best)})
 
