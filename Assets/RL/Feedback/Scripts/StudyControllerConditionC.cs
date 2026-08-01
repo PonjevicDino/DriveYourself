@@ -31,6 +31,9 @@ public class StudyControllerConditionC : MonoBehaviour
     private DictationRecognizer dictationRecognizer;
     private string finalTranscription = "";
     private string currentHypothesis = "";
+    private string finalSentText = "";
+    
+    private MappedFeedback lastMappedData; 
     
     private bool isRecording = false;
     private bool isProcessing = false;
@@ -80,6 +83,14 @@ public class StudyControllerConditionC : MonoBehaviour
         feedbackSlider.value = 0.5f;
         isProcessing = false;
         isRecording = false;
+        lastMappedData = null;
+    }
+    
+    public void OnStartRoundButtonClicked()
+    {
+        page0.SetActive(false);
+        page1.SetActive(true);
+        studyController.StartFirstRound();
     }
 
     public void Update()
@@ -88,24 +99,27 @@ public class StudyControllerConditionC : MonoBehaviour
         {
             if (Input.GetKeyDown(KeyCode.Return))
             {
-                page0.SetActive(false);
-                page1.SetActive(true);
-                studyController.StartFirstRound();
+                OnStartRoundButtonClicked();
             }
         }
         else
         {
             if (!isProcessing)
             {
-                if (Input.GetKeyDown(KeyCode.Return))
+                bool startTrigger = Input.GetKeyDown(KeyCode.Return) || Input.GetMouseButtonDown(1);
+                bool stopTrigger = Input.GetKeyUp(KeyCode.Return) || Input.GetMouseButtonUp(1);
+                bool mockTrigger = (Input.GetKey(KeyCode.Return) || Input.GetMouseButton(1)) && Input.GetKeyDown(KeyCode.Space);
+
+                if (startTrigger)
                 {
                     StartRecording();
                 }
-                if (Input.GetKey(KeyCode.Return) && Input.GetKeyDown(KeyCode.Space))
+                
+                if (mockTrigger)
                 {
                     TriggerDebugMock();
                 }
-                else if (Input.GetKeyUp(KeyCode.Return))
+                else if (stopTrigger)
                 {
                     StopRecordingAndProcess();
                 }
@@ -136,6 +150,7 @@ public class StudyControllerConditionC : MonoBehaviour
         processingStep.SetActive(false);
         doneStep.SetActive(false);
         errorText.SetActive(false);
+        lastMappedData = null;
 
         micHandler.StartRecording();
         
@@ -163,25 +178,32 @@ public class StudyControllerConditionC : MonoBehaviour
         
         isRecording = false;
         isProcessing = true;
+        processingStep.SetActive(true);
+        inputStep.SetActive(false);
+        micHandler.StopRecording("C");
+        StartCoroutine(GracefulStopAndProcess());
+    }
 
+    private IEnumerator GracefulStopAndProcess()
+    {
+        yield return new WaitForSeconds(1.0f);
+        
         if (dictationRecognizer.Status == SpeechSystemStatus.Running)
         {
             dictationRecognizer.Stop();
         }
-        
-        micHandler.StopRecording("C");
 
-        processingStep.SetActive(true); 
-        string textToSend = (finalTranscription + " " + currentHypothesis).Trim();
+        finalSentText = (finalTranscription + " " + currentHypothesis).Trim();
+        liveTranscriptionText.text = finalSentText;
 
-        if (string.IsNullOrWhiteSpace(textToSend))
+        if (string.IsNullOrWhiteSpace(finalSentText))
         {
             TriggerErrorState();
-            return;
+            yield break;
         }
-
+        
         StartCoroutine(llmHandler.ProcessIntent(
-            textToSend, 
+            finalSentText, 
             HandleLLMSuccess, 
             HandleLLMError
         ));
@@ -209,9 +231,11 @@ public class StudyControllerConditionC : MonoBehaviour
 
         string mockText = $"[DEBUG] Set speed to {s}, distance to center to {d}, acceleration to {a}, and smoothness to {sm}.";
         
-        liveTranscriptionText.text = "Sending Debug Mock:\n" + mockText;
+        finalSentText = mockText;
+        
+        liveTranscriptionText.text = "Sending Debug Mock:\n" + finalSentText;
         StartCoroutine(llmHandler.ProcessIntent(
-            mockText, 
+            finalSentText, 
             HandleLLMSuccess, 
             HandleLLMError
         ));
@@ -241,21 +265,21 @@ public class StudyControllerConditionC : MonoBehaviour
         isRecording = false;
     }
 
-    private IEnumerator WaitAndSubmit(MappedFeedback mappedData)
+    public void OnSubmitFeedbackButtonClicked()
     {
-        yield return new WaitForSeconds(1.0f);
+        if (lastMappedData == null) return;
 
         StudyController.AgentFeedback feedback = new StudyController.AgentFeedback
         {
             likenessScore = feedbackSlider.value,
-            llmLikenessScore = mappedData.likenessScore, 
-            speedAdjustment = StringToEnum(mappedData.speed),
-            dtcAdjustment = StringToEnum(mappedData.dtc),
-            accelAdjustment = StringToEnum(mappedData.acceleration),
-            smoothAdjustment = StringToEnum(mappedData.smoothness)
+            llmLikenessScore = lastMappedData.likenessScore, 
+            speedAdjustment = StringToEnum(lastMappedData.speed),
+            dtcAdjustment = StringToEnum(lastMappedData.dtc),
+            accelAdjustment = StringToEnum(lastMappedData.acceleration),
+            smoothAdjustment = StringToEnum(lastMappedData.smoothness)
         };
 
-        studyController.SubmitFeedback(feedback, finalTranscription, micHandler.GetAudioPaths());
+        studyController.SubmitFeedback(feedback, finalSentText, micHandler.GetAudioPaths());
 
         if (EventSystem.current != null)
         {
@@ -272,6 +296,8 @@ public class StudyControllerConditionC : MonoBehaviour
         micHandler.ResetForNextRound();
         finalTranscription = "";
         currentHypothesis = "";
+        finalSentText = "";
+        lastMappedData = null;
     }
 
     private void ResetSteps()
@@ -298,8 +324,10 @@ public class StudyControllerConditionC : MonoBehaviour
         }
         else
         {
+            lastMappedData = mappedData;
             doneStep.SetActive(true);
-            StartCoroutine(WaitAndSubmit(mappedData));
+            processingStep.SetActive(false);
+            isProcessing = false; 
         }
     }
 

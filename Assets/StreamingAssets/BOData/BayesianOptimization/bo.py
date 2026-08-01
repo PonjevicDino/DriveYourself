@@ -189,33 +189,39 @@ def parse_obj_init(init_val):
 
 # -------------------- Preference Update Logic --------------------
 def update_priors(x_tensor, adjs):
-    global active_priors, param_space
-    if not adjs:
-        return
+   global active_priors, param_space
+   if not adjs:
+       return
 
-    x_np = x_tensor.cpu().numpy()
-    new_priors = []
+   x_np = x_tensor.cpu().numpy()
+   new_priors = []
 
-    for i, name in enumerate(parameter_names):
+   STD_FRACTION = 0.2
+
+   DIRECTION_OFFSETS = {
+                  -2: -0.4,  # much less
+                   -1: -0.2, # less
+                  0: 0.0,  # keep
+                  1: 0.2,  # more
+                  2: 0.4,  # much more
+   }
+
+   for i, name in enumerate(parameter_names):
         if name in adjs:
             adj = int(adjs[name])
             lo, hi = parameters_info[i]
             x_val = denormalize_to_original_param(x_np[i], lo, hi)
             span = hi - lo
-            eps = span * 0.001
-            if adj <= -2:  # Much Less
-                new_priors.append(param_space.soft_bound(name, low=lo, high=max(lo + eps, x_val - 0.1 * span)))
-            elif adj == -1:  # Slightly Less
-                new_priors.append(param_space.soft_bound(name, low=lo, high=max(lo + eps, x_val)))
-            elif adj == 0:  # Keep
-                new_priors.append(param_space.gaussian(name, mean=x_val, std=span * 0.05))
-            elif adj == 1:  # Slightly More
-                new_priors.append(param_space.soft_bound(name, low=min(hi - eps, x_val), high=hi))
-            elif adj >= 2:  # Much More
-                new_priors.append(param_space.soft_bound(name, low=min(hi - eps, x_val + 0.1 * span), high=hi))
 
-    active_priors = new_priors
-    print(f"-> Updated {len(active_priors)} preference priors based on user feedback.", flush=True)
+            if adj >= -2 and adj <=2:
+                 offset_frac = DIRECTION_OFFSETS[adj]
+                 mean = np.clip(x_val + offset_frac * span, lo, hi )
+                 std = STD_FRACTION * span
+
+                 new_priors.append(param_space.gaussian(name, mean=mean,std=std))
+
+   active_priors = new_priors
+   print(f"-> Updated {len(active_priors)} preference priors based on user feedback.", flush=True)
 
 
 # -------------------- objective evaluation --------------------

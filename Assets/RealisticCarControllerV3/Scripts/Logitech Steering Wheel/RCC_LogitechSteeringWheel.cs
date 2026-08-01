@@ -458,7 +458,7 @@ public class RCC_LogitechSteeringWheel : MonoBehaviour
             LogitechGSDK.LogiStopSurfaceEffect(0);
         }
 
-        if (playerVehicle.ESPAct)
+        if (playerVehicle.ESPAct && espAbsFactor > 0.0f)
         {
             LogitechGSDK.LogiStopSpringForce(0);
             LogitechGSDK.LogiPlayConstantForce(0, espFFB);

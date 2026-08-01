@@ -96,6 +96,10 @@ public class DriveYourselfAgent : Agent
     [SerializeField, Min(0.0f)] private float startingMaximumForwardSpeed;
     [SerializeField, Min(0.0f)] private float startingMaximumSidewaysSpeed;
 
+    [Header("Heuristic")] 
+    [SerializeField] private bool heuristicWithSteeringWheel = false;
+    private RCC_InputManager vehicleInputManager;
+
     public override void Initialize()
     {
         carController = this.transform.parent.GetComponent<RCC_CarControllerV4>();
@@ -276,8 +280,21 @@ public class DriveYourselfAgent : Agent
     public override void Heuristic(in ActionBuffers actionsOut)
     {
         var actions = actionsOut.ContinuousActions;
-        actions[0] = Input.GetKey(KeyCode.UpArrow) ? 1.0f : Input.GetKey(KeyCode.DownArrow) ? -1f : 0;
-        actions[1] = Input.GetKey(KeyCode.RightArrow) ? 1.0f : Input.GetKey(KeyCode.LeftArrow) ? -1 : 0;
+        if (heuristicWithSteeringWheel)
+        {
+            if (vehicleInputManager == null)
+            {
+                vehicleInputManager = GameObject.FindFirstObjectByType<RCC_InputManager>().GetComponent<RCC_InputManager>();
+            }
+
+            actions[0] = vehicleInputManager.inputs.throttleInput - vehicleInputManager.inputs.brakeInput;
+            actions[1] = vehicleInputManager.inputs.steerInput;
+        }
+        else
+        {
+            actions[0] = Input.GetKey(KeyCode.UpArrow) ? 1.0f : Input.GetKey(KeyCode.DownArrow) ? -1f : 0;
+            actions[1] = Input.GetKey(KeyCode.RightArrow) ? 1.0f : Input.GetKey(KeyCode.LeftArrow) ? -1 : 0;
+        }
     }
 
     public override void CollectObservations(VectorSensor sensor)

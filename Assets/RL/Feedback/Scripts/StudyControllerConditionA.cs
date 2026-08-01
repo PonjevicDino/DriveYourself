@@ -11,7 +11,13 @@ public class StudyControllerConditionA : MonoBehaviour
     [SerializeField] private TextMeshProUGUI page0Title;
     [SerializeField] private GameObject page1;
     [SerializeField] private TextMeshProUGUI page1Title;
-
+    
+    public void OnStartRoundButtonClicked()
+    {
+        page0.SetActive(false);
+        page1.SetActive(true);
+        studyController.StartFirstRound();
+    }
 
     public void OnSubmitButtonClicked()
     {
@@ -34,9 +40,7 @@ public class StudyControllerConditionA : MonoBehaviour
         {
             if (Input.GetKeyDown(KeyCode.Return))
             {
-                page0.SetActive(false);
-                page1.SetActive(true);
-                studyController.StartFirstRound();
+                OnStartRoundButtonClicked();
             }
         }
         else
@@ -51,7 +55,6 @@ public class StudyControllerConditionA : MonoBehaviour
     public void OnEnable()
     {
         page0Title.text = "DriveYourself - ID " + studyController.participantID + " - Condition A";
-        //page1Title.text = "Feedback for previous Driving Style: " + studyController.demoBoManager.ReturnIterations()[0] + "/" + studyController.demoBoManager.ReturnIterations()[1];
         page1Title.text = "Feedback for previous Driving Style: " + studyController.boManager.currentIteration + "/" + studyController.boManager.totalIterations;
     }
 }

@@ -15,6 +15,13 @@ public class StudyControllerConditionB : MonoBehaviour
     [SerializeField] private TextMeshProUGUI page0Title;
     [SerializeField] private GameObject page1;
     [SerializeField] private TextMeshProUGUI page1Title;
+    
+    public void OnStartRoundButtonClicked()
+    {
+        page0.SetActive(false);
+        page1.SetActive(true);
+        studyController.StartFirstRound();
+    }
 
     public void OnSubmitButtonClicked()
     {
@@ -51,9 +58,7 @@ public class StudyControllerConditionB : MonoBehaviour
         {
             if (Input.GetKeyDown(KeyCode.Return))
             {
-                page0.SetActive(false);
-                page1.SetActive(true);
-                studyController.StartFirstRound();
+                OnStartRoundButtonClicked();
             }
         }
         else

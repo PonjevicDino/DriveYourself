@@ -117,6 +117,8 @@ public class StudyController : MonoBehaviour
         });
         
         RespawnCar();
+        AudioListener.volume = 0f;
+        
         car.GetComponent<Rigidbody>().isKinematic = true;
         loadingScreen.SetActive(false);
         startupWindow.SetActive(true);
@@ -433,6 +435,7 @@ public class StudyController : MonoBehaviour
         }
         
         roundStopTime = Time.realtimeSinceStartup;
+        AudioListener.volume = 0f;
     }
 
     private void RespawnCar()
@@ -445,6 +448,7 @@ public class StudyController : MonoBehaviour
         }
         
         UpdateSteeringWheelState(false);
+        AudioListener.volume = 1f;
     }
 
     private void ResetSingleCar(GameObject targetCar)
