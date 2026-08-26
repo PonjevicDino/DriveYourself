@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Networking;
-using UnityEngine.Windows.Speech;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using System.Runtime.InteropServices; 
 
 public class StudyControllerConditionC : MonoBehaviour
 {
@@ -28,54 +28,42 @@ public class StudyControllerConditionC : MonoBehaviour
     [SerializeField] private StudyControllerMicHandler micHandler;
     [SerializeField] private StudyControllerLlmHandler llmHandler;
     
-    private DictationRecognizer dictationRecognizer;
-    private string finalTranscription = "";
-    private string currentHypothesis = "";
-    private string finalSentText = "";
+    [Header("Speech Input")]
+    [SerializeField] private TMP_InputField hiddenSpeechInput; 
     
+    private string finalSentText = "";
     private MappedFeedback lastMappedData; 
     
     private bool isRecording = false;
     private bool isProcessing = false;
+    private bool isDictationOpen = false;
+    private bool isSpoofingOS = false; 
     
-    private float silenceTimer = 0f;
-    private const float pauseThreshold = 1.5f;
+    private Coroutine recordingRoutine;   
+    private bool startedWithMouse = false;
     
-    private void Start()
-    {
-        dictationRecognizer = new DictationRecognizer();
-        dictationRecognizer.AutoSilenceTimeoutSeconds = 120f;
-        dictationRecognizer.InitialSilenceTimeoutSeconds = 120f;
-        dictationRecognizer.DictationHypothesis += (text) =>
-        {
-            silenceTimer = 0f;
-            currentHypothesis = text;
-            liveTranscriptionText.text = finalTranscription + " " + currentHypothesis + "...";
-        };
-        dictationRecognizer.DictationResult += (text, confidence) =>
-        {
-            if (!string.IsNullOrEmpty(currentHypothesis))
-            {
-                finalTranscription += text.Trim() + ". ";
-                currentHypothesis = "";
-                silenceTimer = 0f;
-                liveTranscriptionText.text = finalTranscription;
-            }
-        };
-        dictationRecognizer.DictationError += (error, hresult) =>
-        {
-            Debug.LogError("Dictation error: " + error);
-            TriggerErrorState();
-        };
-    }
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+    
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
+    
+    [DllImport("user32.dll")]
+    static extern short GetAsyncKeyState(int vKey);
+
+    private const byte VK_LWIN = 0x5B; 
+    private const byte VK_H = 0x48;    
+    private const uint KEYEVENTF_KEYUP = 0x0002; 
+    
+    private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+    private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+    private const int VK_RBUTTON = 0x02;
 
     public void OnEnable()
     {
         page0Title.text = "DriveYourself - ID " + studyController.participantID + " - Condition C";
-        //if (studyController.demoBoManager != null)
         if (studyController.boManager != null)
         {
-            //page1Title.text = "Feedback for previous Driving Style: " + studyController.demoBoManager.ReturnIterations()[0] + "/" + studyController.demoBoManager.ReturnIterations()[1];
             page1Title.text = "Feedback for previous Driving Style: " + studyController.boManager.currentIteration + "/" + studyController.boManager.totalIterations;
         }
         
@@ -83,6 +71,8 @@ public class StudyControllerConditionC : MonoBehaviour
         feedbackSlider.value = 0.5f;
         isProcessing = false;
         isRecording = false;
+        isDictationOpen = false;
+        isSpoofingOS = false;
         lastMappedData = null;
     }
     
@@ -92,58 +82,85 @@ public class StudyControllerConditionC : MonoBehaviour
         page1.SetActive(true);
         studyController.StartFirstRound();
     }
+    
+    private bool IsRightMouseButtonPhysicallyDown()
+    {
+        return (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+    }
 
     public void Update()
     {
         if (page0.activeSelf)
         {
-            if (Input.GetKeyDown(KeyCode.Return))
-            {
-                OnStartRoundButtonClicked();
-            }
+            if (Input.GetKeyDown(KeyCode.Return)) OnStartRoundButtonClicked();
         }
         else
         {
-            if (!isProcessing)
+            if (isRecording && !isSpoofingOS)
             {
-                bool startTrigger = Input.GetKeyDown(KeyCode.Return) || Input.GetMouseButtonDown(1);
-                bool stopTrigger = Input.GetKeyUp(KeyCode.Return) || Input.GetMouseButtonUp(1);
+                if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != hiddenSpeechInput.gameObject)
+                {
+                    EventSystem.current.SetSelectedGameObject(hiddenSpeechInput.gameObject);
+                    hiddenSpeechInput.ActivateInputField();
+                    hiddenSpeechInput.MoveTextEnd(false);
+                }
+            }
+            
+            if (!isProcessing && !isSpoofingOS)
+            {
+                bool startTriggerMouse = Input.GetMouseButtonDown(1);
+                bool startTriggerKey = Input.GetKeyDown(KeyCode.Return);
                 bool mockTrigger = (Input.GetKey(KeyCode.Return) || Input.GetMouseButton(1)) && Input.GetKeyDown(KeyCode.Space);
 
-                if (startTrigger)
+                if ((startTriggerMouse || startTriggerKey) && !isRecording)
                 {
-                    StartRecording();
+                    startedWithMouse = startTriggerMouse;
+                    if (recordingRoutine != null) StopCoroutine(recordingRoutine);
+                    recordingRoutine = StartCoroutine(StartRecordingRoutine(startTriggerMouse));
                 }
-                
-                if (mockTrigger)
+                else if (mockTrigger)
                 {
                     TriggerDebugMock();
                 }
-                else if (stopTrigger)
+                else if (isRecording)
                 {
-                    StopRecordingAndProcess();
-                }
-                
-                if (isRecording && !string.IsNullOrEmpty(currentHypothesis))
-                {
-                    silenceTimer += Time.deltaTime;
-                    if (silenceTimer > pauseThreshold)
+                    bool shouldStop = false;
+                    
+                    if (startedWithMouse && !IsRightMouseButtonPhysicallyDown()) 
                     {
-                        finalTranscription += currentHypothesis.Trim() + ". ";
-                        currentHypothesis = "";
-                        silenceTimer = 0f;
-                        liveTranscriptionText.text = finalTranscription;
+                        shouldStop = true;
+                    }
+                    else if (!startedWithMouse && Input.GetKeyUp(KeyCode.Return)) 
+                    {
+                        shouldStop = true;
+                    }
+
+                    if (shouldStop)
+                    {
+                        if (recordingRoutine != null) StopCoroutine(recordingRoutine);
+                        StopRecordingAndProcess();
                     }
                 }
             }
         }
     }
 
-    private void StartRecording()
+    private void ToggleWindowsDictation()
+    {
+        keybd_event(VK_LWIN, 0, 0, 0); 
+        keybd_event(VK_H, 0, 0, 0);    
+        
+        keybd_event(VK_H, 0, KEYEVENTF_KEYUP, 0);    
+        keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0); 
+    }
+
+    private IEnumerator StartRecordingRoutine(bool isMouseTrigger)
     {
         isRecording = true;
-        finalTranscription = "";
-        currentHypothesis = "";
+        isDictationOpen = false;
+        isSpoofingOS = true;
+        
+        finalSentText = "";
         liveTranscriptionText.text = "Listening...";
         
         inputStep.SetActive(true);
@@ -154,70 +171,82 @@ public class StudyControllerConditionC : MonoBehaviour
 
         micHandler.StartRecording();
         
-        try
+        if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(hiddenSpeechInput.gameObject);
+        hiddenSpeechInput.Select();
+        hiddenSpeechInput.ActivateInputField();
+        hiddenSpeechInput.MoveTextEnd(false);
+        
+        yield return new WaitForSeconds(0.2f); 
+        
+        if (isMouseTrigger)
         {
-            if (dictationRecognizer.Status != SpeechSystemStatus.Running)
-            {
-                dictationRecognizer.Start();
-            }
+            mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0);
+            yield return new WaitForSeconds(0.05f);
         }
-        catch (System.Exception ex)
+        
+        ToggleWindowsDictation(); 
+        isDictationOpen = true; 
+        
+        yield return new WaitForSeconds(0.2f);
+        if (isMouseTrigger)
         {
-            Debug.LogError("Windows Speech Error: " + ex.Message);
-            TriggerErrorState();
-            liveTranscriptionText.text = "Windows Speech disabled.\nPlease enable in OS Settings.";
+            mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0);
         }
+
+        isSpoofingOS = false;
+
+        // Mirror the text live
+        hiddenSpeechInput.onValueChanged.RemoveAllListeners();
+        hiddenSpeechInput.onValueChanged.AddListener((newText) => 
+        {
+            finalSentText = newText;
+            liveTranscriptionText.text = finalSentText;
+        });
     }
 
     private void StopRecordingAndProcess()
     {
-        if (!isRecording)
-        {
-            return;
-        }
-        
         isRecording = false;
         isProcessing = true;
         processingStep.SetActive(true);
         inputStep.SetActive(false);
-        micHandler.StopRecording("C");
-        StartCoroutine(GracefulStopAndProcess());
-    }
-
-    private IEnumerator GracefulStopAndProcess()
-    {
-        yield return new WaitForSeconds(1.0f);
         
-        if (dictationRecognizer.Status == SpeechSystemStatus.Running)
+        micHandler.StopRecording("C");
+        
+        if (isDictationOpen)
         {
-            dictationRecognizer.Stop();
+            ToggleWindowsDictation();
+            isDictationOpen = false;
         }
 
-        finalSentText = (finalTranscription + " " + currentHypothesis).Trim();
-        liveTranscriptionText.text = finalSentText;
+        hiddenSpeechInput.onValueChanged.RemoveAllListeners();
+        hiddenSpeechInput.DeactivateInputField();
+        if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
+
+        finalSentText = finalSentText.Trim();
 
         if (string.IsNullOrWhiteSpace(finalSentText))
         {
             TriggerErrorState();
-            yield break;
+            return;
         }
         
-        StartCoroutine(llmHandler.ProcessIntent(
-            finalSentText, 
-            HandleLLMSuccess, 
-            HandleLLMError
-        ));
+        StartCoroutine(llmHandler.ProcessIntent(finalSentText, HandleLLMSuccess, HandleLLMError));
     }
     
     private void TriggerDebugMock()
     {
-        if (dictationRecognizer.Status == SpeechSystemStatus.Running)
+        if (recordingRoutine != null) StopCoroutine(recordingRoutine);
+        
+        if (isDictationOpen)
         {
-            dictationRecognizer.Stop();
+            ToggleWindowsDictation();
+            isDictationOpen = false;
         }
-
+        
         isRecording = false;
         isProcessing = true;
+        isSpoofingOS = false;
 
         processingStep.SetActive(true);
         inputStep.SetActive(false);
@@ -230,15 +259,10 @@ public class StudyControllerConditionC : MonoBehaviour
         string sm = opts[Random.Range(0, opts.Length)];
 
         string mockText = $"[DEBUG] Set speed to {s}, distance to center to {d}, acceleration to {a}, and smoothness to {sm}.";
-        
         finalSentText = mockText;
-        
         liveTranscriptionText.text = "Sending Debug Mock:\n" + finalSentText;
-        StartCoroutine(llmHandler.ProcessIntent(
-            finalSentText, 
-            HandleLLMSuccess, 
-            HandleLLMError
-        ));
+        
+        StartCoroutine(llmHandler.ProcessIntent(finalSentText, HandleLLMSuccess, HandleLLMError));
     }
     
     private StudyController.ParameterAdjustment StringToEnum(string val)
@@ -263,6 +287,7 @@ public class StudyControllerConditionC : MonoBehaviour
         errorText.SetActive(true);
         isProcessing = false;
         isRecording = false;
+        isSpoofingOS = false;
     }
 
     public void OnSubmitFeedbackButtonClicked()
@@ -281,10 +306,7 @@ public class StudyControllerConditionC : MonoBehaviour
 
         studyController.SubmitFeedback(feedback, finalSentText, micHandler.GetAudioPaths());
 
-        if (EventSystem.current != null)
-        {
-            EventSystem.current.SetSelectedGameObject(null);
-        }
+        if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
 
         ResetSteps();
         
@@ -294,8 +316,6 @@ public class StudyControllerConditionC : MonoBehaviour
         isProcessing = false;
         
         micHandler.ResetForNextRound();
-        finalTranscription = "";
-        currentHypothesis = "";
         finalSentText = "";
         lastMappedData = null;
     }
@@ -306,14 +326,6 @@ public class StudyControllerConditionC : MonoBehaviour
         processingStep.SetActive(false);
         doneStep.SetActive(false);
         errorText.SetActive(false);
-    }
-
-    private void OnDestroy()
-    {
-        if (dictationRecognizer != null)
-        {
-            dictationRecognizer.Dispose();
-        }
     }
 
     private void HandleLLMSuccess(MappedFeedback mappedData)
