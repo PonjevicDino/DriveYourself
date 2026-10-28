@@ -75,10 +75,12 @@ public class ControllerSwitcher : MonoBehaviour
         if (currentControllerMode == ControllerMode.RL)
         {
             car.externalController = true;
+            carControllers.transform.GetChild(0).gameObject.SetActive(true);
         }
         else
         {
             car.externalController = false;
+            carControllers.transform.GetChild(0).gameObject.SetActive(false);
         }
 
         ApplyButtons();

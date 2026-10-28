@@ -9,7 +9,7 @@ OcclusionCullingSettings:
     smallestHole: 0.25
     backfaceThreshold: 100
   m_SceneGUID: 217740ff2d848494ca8da267bdae43e6
-  m_OcclusionCullingData: {fileID: 36300000, guid: 376bd3c73e632fb4aa241f80658c089a, type: 2}
+  m_OcclusionCullingData: {fileID: 36300000, guid: 672c020719b37934d980969ad6d25550, type: 2}
 --- !u!104 &2
 RenderSettings:
   m_ObjectHideFlags: 0
@@ -9908,10 +9908,10 @@ MonoBehaviour:
   maxGripThreshold: 0.9
   corneringStiffnessFront: 65000
   corneringStiffnessRear: 65000
-  steerSearchWindow: 0.0625
+  steerSearchWindow: 0.175
   steerSmoothnessPenalty: 290
-  pedalSearchWindow: 0.0625
-  pedalSmoothnessPenalty: 145
+  pedalSearchWindow: 0.06
+  pedalSmoothnessPenalty: 150
   mpcUpdatesPerSecond: 20
   horizonSteps: 30
   steerControlSteps: 3
@@ -9934,17 +9934,17 @@ MonoBehaviour:
   maxManualInputBrake: 1
   maxManualInputSteer: 1
   targetSpeed: 50
-  maxDtC: 2.5
+  maxDtC: 4
   accelTime0to100: 10
   maxLateralGrip: 9.81
   steerSearchWindow: 0.17500001
-  steerSmoothnessPenalty: 42.5
+  steerSmoothnessPenalty: 290
   pedalSearchWindow: 0.060000002
   pedalSmoothnessPenalty: 150
   mpcUpdatesPerSecond: 20
-  horizonSteps: 15
-  timeStep: 0.075
-  numSamples: 500000
+  horizonSteps: 30
+  timeStep: 0.1
+  numSamples: 15625
 --- !u!1 &211089788
 GameObject:
   m_ObjectHideFlags: 0
