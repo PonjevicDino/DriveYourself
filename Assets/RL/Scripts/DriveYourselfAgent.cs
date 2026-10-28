@@ -98,6 +98,7 @@ public class DriveYourselfAgent : Agent
 
     [Header("Heuristic")] 
     [SerializeField] private bool heuristicWithSteeringWheel = false;
+    [HideInInspector] public bool isControlActive = true;
     private RCC_InputManager vehicleInputManager;
 
     public override void Initialize()
@@ -124,6 +125,12 @@ public class DriveYourselfAgent : Agent
         fixedUpdateCounter++;
         accumulatedPhysicsTime += Time.fixedDeltaTime;
         ingameSecondsSinceStartup = fixedUpdateCounter * Time.fixedDeltaTime;
+        
+        if (!isControlActive)
+        {
+            timeAtLastSignificantMove = ingameSecondsSinceStartup;
+            return;
+        }
         
         currentThrottle = Mathf.MoveTowards(currentThrottle, targetThrottle, (1.0f / pedalSpeed) * Time.fixedDeltaTime);
         currentBrake = Mathf.MoveTowards(currentBrake, targetBrake, (1.0f / pedalSpeed) * Time.fixedDeltaTime);
@@ -153,6 +160,27 @@ public class DriveYourselfAgent : Agent
             {
                 Academy.Instance.StatsRecorder.Add("Performance/Lag_Spikes", 1.0f, StatAggregationMethod.Sum);
             }
+        }
+    }
+    
+    public void SetControlActive(bool active)
+    {
+        isControlActive = active;
+        if (carController == null && transform.parent != null)
+            carController = transform.parent.GetComponent<RCC_CarControllerV4>();
+
+        if (active && carController != null)
+        {
+            carController.overrideInputs = false;
+            carController.externalController = true;
+
+            currentThrottle = carController.throttleInput;
+            currentBrake = carController.brakeInput;
+            currentSteeringAngle = carController.steerInput;
+            targetThrottle = currentThrottle;
+            targetBrake = currentBrake;
+            targetSteer = currentSteeringAngle;
+            timeAtLastSignificantMove = ingameSecondsSinceStartup;
         }
     }
     
@@ -392,7 +420,7 @@ public class DriveYourselfAgent : Agent
     {
         //Debug.Log($"{GetHashCode()}: actions.ContinuousActions[0]: {actions.ContinuousActions[0]}; actions.ContinuousActions[1]: {actions.ContinuousActions[1]}; rpm: {carController.engineRPM}");
 
-        if (!carController)
+        if (!carController || !isControlActive)
         {
             return;
         }

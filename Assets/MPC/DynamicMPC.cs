@@ -98,41 +98,61 @@ public class DynamicMPC : MonoBehaviour
     private float dynLf;
     private float dynLr;
 
+    private bool isInitialized = false;
+
     void Start()
     {
-        carController = transform.parent.GetComponent<RCC_CarControllerV4>();
-        carRigidBody = carController.GetComponent<Rigidbody>();
-        vehicleData = GetComponent<GetVehicleData>();
-        carController.overrideInputs = true;
-        
+        EnsureInitialized();
+    }
+
+    private void EnsureInitialized()
+    {
+        if (isInitialized) return;
+
+        if (carController == null && transform.parent != null)
+            carController = transform.parent.GetComponent<RCC_CarControllerV4>();
+        if (carRigidBody == null && carController != null)
+            carRigidBody = carController.GetComponent<Rigidbody>();
+        if (vehicleData == null)
+            vehicleData = GetComponent<GetVehicleData>();
+
+        if (carController == null || carRigidBody == null || vehicleData == null ||
+            vehicleData.roadLayout == null || vehicleData.roadLayout.trackSpline == null)
+            return;
+
         dynMass = carRigidBody.mass;
         dynYawInertia = carRigidBody.inertiaTensor.y > 0 ? carRigidBody.inertiaTensor.y : (dynMass * 5.0f);
-        
-        float wheelRadius = carController.FrontLeftWheelCollider.WheelCollider.radius; 
-        float totalGearRatio = carController.gears[0].maxRatio * carController.finalRatio; 
-        
-        theoreticalMaxDriveForce = (carController.maxEngineTorque * totalGearRatio) / wheelRadius; 
+
+        float wheelRadius = carController.FrontLeftWheelCollider.WheelCollider.radius;
+        float totalGearRatio = carController.gears[0].maxRatio * carController.finalRatio;
+
+        theoreticalMaxDriveForce = (carController.maxEngineTorque * totalGearRatio) / wheelRadius;
         calibratedDriveForce = Mathf.Min(theoreticalMaxDriveForce * 0.55f, tireFrictionCoeff * 9.81f * dynMass);
-        dynMaxBrakeForce = (carController.brakeTorque * 4.0f) / wheelRadius; 
-        
+        dynMaxBrakeForce = (carController.brakeTorque * 4.0f) / wheelRadius;
+
         float wheelbase = 2.55f;
-        dynLf = wheelbase * 0.5f; 
+        dynLf = wheelbase * 0.5f;
         dynLr = wheelbase * 0.5f;
 
-        if (vehicleData.roadLayout.trackSpline.Spline != null)
+        if (!isSplineInitialized && vehicleData.roadLayout.trackSpline.Spline != null)
         {
             BakeTrackLookupTable();
             UpdateBakedSpeedProfile();
-            vehicleData.InitContinuousSplineState(); 
+            vehicleData.InitContinuousSplineState();
         }
-        
-        AllocateSampleArrays(numSamples);
-        
+
+        if (allocatedSamples != numSamples || !sequenceCosts.IsCreated)
+        {
+            AllocateSampleArrays(numSamples);
+        }
+
         steeringWheel = carController.GetComponent<RCC_LogitechSteeringWheel>();
-        if (steeringWheel != null) 
-        { 
+        if (steeringWheel != null)
+        {
             steeringWheel.overrideFFB = true;
         }
+
+        isInitialized = true;
     }
     
     public void ApplyParameters(float newTargetSpeed, float newMaxDtC, float dtcWeightRatio, float newAccelTime0to100, float smoothNormalized)
@@ -324,7 +344,11 @@ public class DynamicMPC : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (manualControl || !isSplineInitialized) return;
+        EnsureInitialized();
+        if (manualControl || !isInitialized || !isSplineInitialized)
+        {
+            return;
+        }
 
         if (numSamples != allocatedSamples)
         {

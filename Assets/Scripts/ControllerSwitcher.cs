@@ -4,9 +4,6 @@ using UnityEngine;
 
 public class ControllerSwitcher : MonoBehaviour
 {
-    [SerializeField] private GameObject carControllers;
-    private RCC_CarControllerV4 car;
-    
     public enum ControllerMode
     {
         RL,
@@ -20,27 +17,62 @@ public class ControllerSwitcher : MonoBehaviour
     [SerializeField] private GameObject enabledMPCsButton;
     [SerializeField] private GameObject enabledMPCdButton;
     
+    private ControllerMode appliedControllerMode;
+    private bool pendingModeSwitch = false;
+
     public ControllerMode CurrentMode => currentControllerMode;
     public bool IsRLMode => currentControllerMode == ControllerMode.RL;
 
-    void Start()
-    {
-        car = carControllers.transform.parent.GetComponent<RCC_CarControllerV4>();
-    }
-    
+    [SerializeField] private GameObject controllers;
+    private DriveYourselfAgent agent;
+    private DecisionRequester agentDecisionRequester;
+    private SimpleMPC simpleMpc;
+    private DynamicMPC dynamicMpc;
+    private RCC_CarControllerV4 carController;
+
     private void Awake()
     {
-        if (car == null)
-        {
-            Start();
-        }
+        CacheComponents();
         SwitchControllerMode();
+    }
+
+    private void CacheComponents()
+    {
+        if (agent == null)
+        {
+            agent = controllers.GetComponent<DriveYourselfAgent>();
+        }
+        if (agentDecisionRequester == null)
+        {
+            agentDecisionRequester = controllers.GetComponent<DecisionRequester>();
+        }
+        if (simpleMpc == null)
+        {
+            simpleMpc = controllers.GetComponent<SimpleMPC>();
+        }
+        if (dynamicMpc == null)
+        {
+            dynamicMpc = controllers.GetComponent<DynamicMPC>();
+        }
+        if (carController == null && transform.parent != null)
+        {
+            carController = controllers.transform.parent.GetComponent<RCC_CarControllerV4>();
+        }
     }
 
     private void OnValidate()
     {
-        if (Application.isPlaying)
+        if (Application.isPlaying && currentControllerMode != appliedControllerMode)
         {
+            pendingModeSwitch = true;
+        }
+    }
+
+    private void Update()
+    {
+        if (pendingModeSwitch)
+        {
+            pendingModeSwitch = false;
             SwitchControllerMode();
         }
     }
@@ -65,22 +97,40 @@ public class ControllerSwitcher : MonoBehaviour
 
     private void SwitchControllerMode()
     {
-        carControllers.GetComponent<SimpleMPC>().enabled = currentControllerMode == ControllerMode.MPC_SIMPLE;
-        carControllers.GetComponent<DynamicMPC>().enabled = currentControllerMode == ControllerMode.MPC_DYNAMIC;
-        
-        carControllers.GetComponent<BehaviorParameters>().enabled = currentControllerMode == ControllerMode.RL;
-        carControllers.GetComponent<DecisionRequester>().enabled = currentControllerMode == ControllerMode.RL;
-        carControllers.GetComponent<DriveYourselfAgent>().enabled = currentControllerMode == ControllerMode.RL;
+        CacheComponents();
+        appliedControllerMode = currentControllerMode;
+        pendingModeSwitch = false;
 
-        if (currentControllerMode == ControllerMode.RL)
+        bool isRL = currentControllerMode == ControllerMode.RL;
+        bool isSimple = currentControllerMode == ControllerMode.MPC_SIMPLE;
+        bool isDynamic = currentControllerMode == ControllerMode.MPC_DYNAMIC;
+
+        if (simpleMpc != null && !isSimple)
         {
-            car.externalController = true;
-            carControllers.transform.GetChild(0).gameObject.SetActive(true);
+            simpleMpc.enabled = false;
         }
-        else
+        if (dynamicMpc != null && !isDynamic)
         {
-            car.externalController = false;
-            carControllers.transform.GetChild(0).gameObject.SetActive(false);
+            dynamicMpc.enabled = false;
+        }
+
+        if (agentDecisionRequester != null)
+        {
+            agentDecisionRequester.enabled = isRL;
+        }
+        if (agent != null)
+        {
+            if (!agent.enabled) agent.enabled = true;
+            agent.SetControlActive(isRL);
+        }
+        
+        if (simpleMpc != null && isSimple) simpleMpc.enabled = true;
+        if (dynamicMpc != null && isDynamic) dynamicMpc.enabled = true;
+        
+        if (carController != null)
+        {
+            carController.overrideInputs = !isRL;
+            carController.externalController = true;
         }
 
         ApplyButtons();

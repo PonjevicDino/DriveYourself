@@ -62,26 +62,67 @@ public class SimpleMPC : MonoBehaviour
     private float bestThrottle = 0f;
     private float bestBrake = 0f;
 
+    private bool isInitialized = false;
+
     void Start()
     {
-        carController = transform.parent.GetComponent<RCC_CarControllerV4>();
-        carRigidBody = carController.GetComponent<Rigidbody>();
-        vehicleData = GetComponent<GetVehicleData>();
-        carController.overrideInputs = true;
-        
-        if (vehicleData.roadLayout.trackSpline.Spline != null)
+        EnsureInitialized();
+    }
+
+    private void EnsureInitialized()
+    {
+        if (isInitialized) return;
+
+        if (carController == null && transform.parent != null)
+            carController = transform.parent.GetComponent<RCC_CarControllerV4>();
+        if (carRigidBody == null && carController != null)
+            carRigidBody = carController.GetComponent<Rigidbody>();
+        if (vehicleData == null)
+            vehicleData = GetComponent<GetVehicleData>();
+
+        if (carController == null || vehicleData == null || vehicleData.roadLayout == null || vehicleData.roadLayout.trackSpline == null)
+            return;
+
+        if (!isSplineInitialized && vehicleData.roadLayout.trackSpline.Spline != null)
         {
             nativeTrackSpline = new NativeSpline(vehicleData.roadLayout.trackSpline.Spline, Allocator.Persistent);
             trackLength = vehicleData.roadLayout.trackSpline.Spline.GetLength();
             isSplineInitialized = true;
-            
-            vehicleData.InitContinuousSplineState(); 
+            vehicleData.InitContinuousSplineState();
         }
-        
-        sequenceCosts = new NativeArray<float>(numSamples, Allocator.Persistent);
-        sequenceInputs = new NativeArray<float3>(numSamples, Allocator.Persistent);
-        targetPositions = new NativeArray<float3>(horizonSteps, Allocator.Persistent);
-        targetRights = new NativeArray<float3>(horizonSteps, Allocator.Persistent);
+
+        if (!sequenceCosts.IsCreated)
+            sequenceCosts = new NativeArray<float>(numSamples, Allocator.Persistent);
+        if (!sequenceInputs.IsCreated)
+            sequenceInputs = new NativeArray<float3>(numSamples, Allocator.Persistent);
+        if (!targetPositions.IsCreated)
+            targetPositions = new NativeArray<float3>(horizonSteps, Allocator.Persistent);
+        if (!targetRights.IsCreated)
+            targetRights = new NativeArray<float3>(horizonSteps, Allocator.Persistent);
+
+        isInitialized = true;
+    }
+
+    void OnEnable()
+    {
+        EnsureInitialized();
+        if (carController != null)
+        {
+            carController.overrideInputs = true;
+            bestSteer = carController.steerInput;
+            bestThrottle = carController.throttleInput;
+            bestBrake = carController.brakeInput;
+        }
+        timeSinceLastMpc = 0f;
+    }
+
+    void OnDisable()
+    {
+        if (isJobRunning)
+        {
+            mpcJobHandle.Complete();
+            isJobRunning = false;
+        }
     }
 
     void OnDestroy()
@@ -102,7 +143,11 @@ public class SimpleMPC : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (manualControl || !isSplineInitialized) return;
+        EnsureInitialized();
+        if (manualControl || !isInitialized || !isSplineInitialized)
+        {
+            return;
+        }
 
         vehicleData.UpdateVehicleData(Time.fixedDeltaTime);
         timeSinceLastMpc += Time.fixedDeltaTime;
@@ -215,29 +260,6 @@ public class SimpleMPC : MonoBehaviour
         pedalSearchWindow = Mathf.Lerp(0.10f, 0.02f, smoothNormalized);
         steerSmoothnessPenalty = Mathf.Lerp(5.0f, 80.0f, smoothNormalized);
         pedalSmoothnessPenalty = Mathf.Lerp(50.0f, 250.0f, smoothNormalized);
-    }
-
-    void OnEnable()
-    {
-        if (carController == null && transform.parent != null)
-            carController = transform.parent.GetComponent<RCC_CarControllerV4>();
-
-        if (carController != null)
-        {
-            carController.overrideInputs = true;
-            bestSteer = carController.steerInput;
-            bestThrottle = carController.throttleInput;
-            bestBrake = carController.brakeInput;
-        }
-    }
-
-    void OnDisable()
-    {
-        if (isJobRunning)
-        {
-            mpcJobHandle.Complete();
-            isJobRunning = false;
-        }
     }
 
     private void DrawTrajectories(float drawDuration, float calculatedMaxAccel)

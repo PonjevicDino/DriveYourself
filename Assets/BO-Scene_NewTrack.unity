@@ -9815,6 +9815,7 @@ MonoBehaviour:
   startingMaximumForwardSpeed: 0
   startingMaximumSidewaysSpeed: 0
   heuristicWithSteeringWheel: 0
+  isControlActive: 1
 --- !u!114 &200363788
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9908,10 +9909,10 @@ MonoBehaviour:
   maxGripThreshold: 0.9
   corneringStiffnessFront: 65000
   corneringStiffnessRear: 65000
-  steerSearchWindow: 0.175
+  steerSearchWindow: 0.0625
   steerSmoothnessPenalty: 290
-  pedalSearchWindow: 0.06
-  pedalSmoothnessPenalty: 150
+  pedalSearchWindow: 0.0625
+  pedalSmoothnessPenalty: 145
   mpcUpdatesPerSecond: 20
   horizonSteps: 30
   steerControlSteps: 3
@@ -9938,7 +9939,7 @@ MonoBehaviour:
   accelTime0to100: 10
   maxLateralGrip: 9.81
   steerSearchWindow: 0.17500001
-  steerSmoothnessPenalty: 290
+  steerSmoothnessPenalty: 42.5
   pedalSearchWindow: 0.060000002
   pedalSmoothnessPenalty: 150
   mpcUpdatesPerSecond: 20
@@ -15100,11 +15101,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 777ca488cd542f342a146e987301ebb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ControllerSwitcher
-  carControllers: {fileID: 200363779}
   currentControllerMode: 0
   enabledRLButton: {fileID: 1334270256}
   enabledMPCsButton: {fileID: 1648737247}
   enabledMPCdButton: {fileID: 281932326}
+  controllers: {fileID: 200363779}
 --- !u!1 &344424985
 GameObject:
   m_ObjectHideFlags: 0
