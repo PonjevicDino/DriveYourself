@@ -20,6 +20,13 @@ public class AgentSelector : MonoBehaviour
     [Range(0, 100)] public int targetDtC = 85;
     [Range(5, 15)] public int targetAccelTime = 10;
     [Range(1, 9)] public int targetSmoothness = 5;
+
+    [Header("MPC Mapping Bounds")]
+    [Tooltip("Max DtC (meters) when targetDtC weight is 0% (relaxed).")]
+    public float maxRelaxedDtCMeters = 4.0f;
+    [Tooltip("Min DtC (meters) when targetDtC weight is 100% (strict centerline).")]
+    public float minStrictDtCMeters = 0.25f;
+
     private int oldTargetSpeed;
     private int oldTargetDtC;
     private int oldTargetAccelTime;
@@ -32,16 +39,17 @@ public class AgentSelector : MonoBehaviour
 
     private BehaviorParameters behaviorParameters;
     private DriveYourselfAgent agent;
+    private SimpleMPC simpleMpc;
+    private DynamicMPC dynamicMpc;
 
     private ModelAsset[] availableModels;
     private string lastRunPrefix;
     private string resourcesPath;
 
-
     private void OnEnable()
     {
         Initialize();
-        FindAndAssignModel();
+        ApplyToAllControllers();
     }
 
     private void OnValidate()
@@ -56,13 +64,15 @@ public class AgentSelector : MonoBehaviour
             oldTargetDtC = targetDtC;
             oldTargetAccelTime = targetAccelTime;
             oldTargetSmoothness = targetSmoothness;
-            FindAndAssignModel();
+            ApplyToAllControllers();
         }
     }
 
     private void Start()
-    {        
+    {
+        Initialize();
         SearchInModelDatabase();
+        ApplyToAllControllers();
     }
 
     private void Initialize()
@@ -72,16 +82,21 @@ public class AgentSelector : MonoBehaviour
 
         if (agent == null)
             agent = GetComponent<DriveYourselfAgent>();
+
+        if (simpleMpc == null)
+            simpleMpc = GetComponent<SimpleMPC>();
+
+        if (dynamicMpc == null)
+            dynamicMpc = GetComponent<DynamicMPC>();
     }
 
     public void SetValuesFromExternal(int extSpeed, int extDtC, int extAccel, int extSmoothness)
     {
         Initialize();
-        
+
         targetSpeed = extSpeed;
         targetDtC = extDtC;
         targetAccelTime = extAccel;
-        targetSmoothness = extSmoothness;
         targetSmoothness = extSmoothness;
 
         if (targetSpeed != oldTargetSpeed || targetDtC != oldTargetDtC ||
@@ -91,7 +106,30 @@ public class AgentSelector : MonoBehaviour
             oldTargetDtC = targetDtC;
             oldTargetAccelTime = targetAccelTime;
             oldTargetSmoothness = targetSmoothness;
-            FindAndAssignModel();
+            ApplyToAllControllers();
+        }
+    }
+
+    public void ApplyToAllControllers()
+    {
+        ApplyMpcParameters();
+        FindAndAssignModel();
+    }
+
+    private void ApplyMpcParameters()
+    {
+        float dtcWeightRatio = Mathf.Clamp01(targetDtC / 100f);
+        float mappedMaxDtCMeters = Mathf.Lerp(maxRelaxedDtCMeters, minStrictDtCMeters, dtcWeightRatio);
+        float smoothNormalized = Mathf.InverseLerp(1f, 9f, Mathf.Clamp(targetSmoothness, 1, 9));
+
+        if (simpleMpc != null)
+        {
+            simpleMpc.ApplyParameters(targetSpeed, mappedMaxDtCMeters, targetAccelTime, smoothNormalized);
+        }
+
+        if (dynamicMpc != null)
+        {
+            dynamicMpc.ApplyParameters(targetSpeed, mappedMaxDtCMeters, dtcWeightRatio, targetAccelTime, smoothNormalized);
         }
     }
 
@@ -114,6 +152,7 @@ public class AgentSelector : MonoBehaviour
             {
                 Debug.LogWarning(
                     $"[ModelSelector] No models found in Resources path: {resourcesPath}. Keeping previous model.");
+                SetModelRewardStats(targetSpeed, targetDtC, targetAccelTime, targetSmoothness);
                 return;
             }
 
@@ -138,10 +177,11 @@ public class AgentSelector : MonoBehaviour
             {
                 ModelAsset bestModel = availableModels[bestIndex];
 
-                if (currentLoadedModel == bestModel.name && behaviorParameters.Model != null) return;
-
-                behaviorParameters.Model = bestModel;
-                currentLoadedModel = bestModel.name;
+                if (currentLoadedModel != bestModel.name || behaviorParameters.Model == null)
+                {
+                    behaviorParameters.Model = bestModel;
+                    currentLoadedModel = bestModel.name;
+                }
 
                 ApplyModelStatsFromName(bestModel.name);
             }
@@ -151,7 +191,7 @@ public class AgentSelector : MonoBehaviour
             isUpdatingModel = false;
         }
     }
-    
+
     private int GetBestModelIndex(string[] names, int tSpeed, int tDtC, int tAccel, int tSmooth)
     {
         string pattern = @"Agent_(\d+)-S(\d+)-W(\d+)-A(\d+)-Sm(\d+)";
@@ -185,54 +225,67 @@ public class AgentSelector : MonoBehaviour
                 }
             }
         }
-        
+
         return bestIndex;
     }
+
     private void ApplyModelStatsFromName(string modelName)
     {
         string pattern = @"Agent_(\d+)-S(\d+)-W(\d+)-A(\d+)-Sm(\d+)";
         Match match = Regex.Match(modelName, pattern);
-        
-        if(match.Success)
+
+        if (match.Success)
         {
             int fileSpeed = int.Parse(match.Groups[2].Value);
             int fileDtC = int.Parse(match.Groups[3].Value);
             int fileAcc = int.Parse(match.Groups[4].Value);
             int fileSmooth = int.Parse(match.Groups[5].Value);
-            
+
             SetModelRewardStats(fileSpeed, fileDtC, fileAcc, fileSmooth);
         }
     }
 
     private void SearchInModelDatabase()
     {
+        if (string.IsNullOrEmpty(resourcesPath))
+            resourcesPath = "Models/" + runPrefix;
+
         availableModels = Resources.LoadAll<ModelAsset>(resourcesPath);
     }
 
     private void SetModelRewardStats(int fileSpeed, int fileDtC, int fileAcc, int fileSmooth)
     {
+        if (agent == null) return;
+
         agent.targetSpeed = fileSpeed;
         agent.DtCRewardPercent = fileDtC;
-        agent.accelTime0to100 = fileAcc == 0 ? 10 : fileAcc; 
-        
+        agent.accelTime0to100 = fileAcc == 0 ? 10 : fileAcc;
+
         float fullRange = 2.0f;
         float physicsFps = 50.0f;
 
-        if (fileSmooth <= 0) 
+        if (fileSmooth <= 0)
         {
             agent.inputSmoothnessThreshold = fullRange;
         }
-        else 
+        else
         {
             float totalFrames = fileSmooth * physicsFps;
             agent.inputSmoothnessThreshold = fullRange / totalFrames;
         }
+
+        agent.RefreshCachedParameters();
     }
-    
+
     public void ExtractAvailableAgentsForOptimizer(BOforUnity.BoForUnityManager boManager)
     {
         boManager.discreteChoices.Clear();
-        
+
+        if (availableModels == null || availableModels.Length == 0)
+        {
+            SearchInModelDatabase();
+        }
+
         if (availableModels == null || availableModels.Length == 0)
         {
             Debug.LogError("AgentSelector: No models found! Cannot pass discrete choices to BO.");
@@ -243,7 +296,7 @@ public class AgentSelector : MonoBehaviour
         Regex regex = new Regex(pattern);
 
         Debug.Log($"=== Start extracting {availableModels.Length} discrete agents for the optimizer pool.");
-        
+
         foreach (var model in availableModels)
         {
             Match match = regex.Match(model.name);
@@ -256,13 +309,13 @@ public class AgentSelector : MonoBehaviour
                     { "VehicleMaxAcceleration", float.Parse(match.Groups[4].Value) },
                     { "VehicleSmoothness", float.Parse(match.Groups[5].Value) }
                 };
-                
+
                 boManager.discreteChoices.Add(agentParams);
-                
+
                 Debug.Log(model.name + ": Speed-" + agentParams["VehicleSpeed"] + ", DtC-" + agentParams["VehicleDistanceToCenter"] + ", Acc-" + agentParams["VehicleMaxAcceleration"] + ", Smooth-" + agentParams["VehicleSmoothness"]);
             }
         }
-        
+
         Debug.Log($"=== Extracted {boManager.discreteChoices.Count} discrete agents for the optimizer pool.");
     }
 }

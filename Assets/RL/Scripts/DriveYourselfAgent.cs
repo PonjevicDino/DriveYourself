@@ -155,6 +155,41 @@ public class DriveYourselfAgent : Agent
             }
         }
     }
+    
+    public void RefreshCachedParameters()
+    {
+        cachedTargetSpeedMs = targetSpeed / 3.6f;
+        cachedWeightRatio = DtCRewardPercent / 100.0f;
+
+        float dtcTargetLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, cachedWeightRatio);
+        cachedCurrentEffectiveLimit = Mathf.Lerp(maxAllowedRewardDtc, dtcTargetLimit, dtcProgression);
+        cachedCurvePower = Mathf.Lerp(8.0f, 1.0f, cachedWeightRatio);
+
+        cachedEffectiveSteerThreshold = Mathf.Lerp(2.0f, inputSmoothnessThreshold * decisionPeriod, smoothnessProgression);
+        cachedEffectivePedalThreshold = Mathf.Lerp(2.0f, 0.04f * decisionPeriod, smoothnessProgression);
+
+        float linearAvgAccel = 27.78f / Mathf.Max(accelTime0to100, 1.0f);
+        float strictEnginePeak = linearAvgAccel * 1.5f;
+        cachedCurrentAllowedPeak = Mathf.Lerp(20.0f, strictEnginePeak, smoothnessProgression);
+    }
+
+    protected override void OnEnable()
+    {
+        base.OnEnable();
+        if (carController == null && transform.parent != null)
+            carController = transform.parent.GetComponent<RCC_CarControllerV4>();
+
+        if (carController != null)
+        {
+            carController.overrideInputs = false;
+            carController.externalController = true;
+            currentThrottle = carController.throttleInput;
+            currentBrake = carController.brakeInput;
+            currentSteeringAngle = carController.steerInput;
+        }
+
+        RefreshCachedParameters();
+    }
 
     public override void OnEpisodeBegin()
     {
@@ -259,19 +294,7 @@ public class DriveYourselfAgent : Agent
 
         smoothMultiplier = 1.0f;
         
-        cachedTargetSpeedMs = targetSpeed / 3.6f;
-        cachedWeightRatio = DtCRewardPercent / 100.0f;
-        
-        float dtcTargetLimit = Mathf.Lerp(maxAllowedRewardDtc, 0.25f, cachedWeightRatio);
-        cachedCurrentEffectiveLimit = Mathf.Lerp(maxAllowedRewardDtc, dtcTargetLimit, dtcProgression);
-        cachedCurvePower = Mathf.Lerp(8.0f, 1.0f, cachedWeightRatio);
-        
-        cachedEffectiveSteerThreshold = Mathf.Lerp(2.0f, inputSmoothnessThreshold * decisionPeriod, smoothnessProgression);
-        cachedEffectivePedalThreshold = Mathf.Lerp(2.0f, 0.04f * decisionPeriod, smoothnessProgression);
-        
-        float linearAvgAccel = 27.78f / Mathf.Max(accelTime0to100, 1.0f);
-        float strictEnginePeak = linearAvgAccel * 1.5f; 
-        cachedCurrentAllowedPeak = Mathf.Lerp(20.0f, strictEnginePeak, smoothnessProgression);
+        RefreshCachedParameters();
         
         vehicleData.SyncDiscreteSegmentToSpline();
         vehicleData.InitContinuousSplineState();

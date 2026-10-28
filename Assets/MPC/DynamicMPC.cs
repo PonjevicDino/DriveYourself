@@ -134,6 +134,53 @@ public class DynamicMPC : MonoBehaviour
             steeringWheel.overrideFFB = true;
         }
     }
+    
+    public void ApplyParameters(float newTargetSpeed, float newMaxDtC, float dtcWeightRatio, float newAccelTime0to100, float smoothNormalized)
+    {
+        targetSpeed = Mathf.Clamp(newTargetSpeed, 30.0f, 150.0f);
+        maxDtC = Mathf.Clamp(newMaxDtC, 0.25f, 4.0f);
+        centerlinePullPenalty = Mathf.Lerp(10.0f, 120.0f, Mathf.Clamp01(dtcWeightRatio));
+
+        accelTime0to100 = Mathf.Clamp(newAccelTime0to100, 2.0f, 25.0f);
+        decelTime100to0 = Mathf.Clamp(newAccelTime0to100, 1.0f, 15.0f);
+        
+        steerSearchWindow = Mathf.Lerp(0.10f, 0.025f, smoothNormalized);
+        pedalSearchWindow = Mathf.Lerp(0.10f, 0.025f, smoothNormalized);
+        steerSmoothnessPenalty = Mathf.Lerp(80.0f, 500.0f, smoothNormalized);
+        pedalSmoothnessPenalty = Mathf.Lerp(40.0f, 250.0f, smoothNormalized);
+
+        if (isSplineInitialized)
+        {
+            UpdateBakedSpeedProfile();
+        }
+    }
+    
+    public void ResetState()
+    {
+        bestSteer = 0f;
+        bestThrottle = 0f;
+        bestBrake = 0f;
+        timeSinceLastMpc = 0f;
+
+        if (carController != null)
+        {
+            carController.OverrideInputs(new RCC_Inputs());
+        }
+    }
+
+    void OnEnable()
+    {
+        if (carController == null && transform.parent != null)
+            carController = transform.parent.GetComponent<RCC_CarControllerV4>();
+
+        if (carController != null)
+        {
+            carController.overrideInputs = true;
+            bestSteer = carController.steerInput;
+            bestThrottle = carController.throttleInput;
+            bestBrake = carController.brakeInput;
+        }
+    }
 
     private void BakeTrackLookupTable()
     {

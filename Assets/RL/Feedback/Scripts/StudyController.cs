@@ -71,6 +71,8 @@ public class StudyController : MonoBehaviour
     
     private float ctrlHoldTimer = 0f;
     private float roundStopTime = 0f;
+
+    private ControllerSwitcher controllerSwitcher;
     
     public enum ParameterAdjustment 
     {
@@ -92,11 +94,13 @@ public class StudyController : MonoBehaviour
         public ParameterAdjustment smoothAdjustment;
         public float responseTime;
     }
-    
+
     private void Awake()
     {
         if (agentSelector != null)
         {
+            controllerSwitcher = agentSelector.GetComponent<ControllerSwitcher>();
+
             DriveYourselfAgent agent = agentSelector.GetComponent<DriveYourselfAgent>();
             if (agent != null)
             {
@@ -236,7 +240,14 @@ public class StudyController : MonoBehaviour
         PlayerPrefs.SetInt("ActiveLLMProvider", llmProviderDropdown.value);
         PlayerPrefs.Save();
         
-        agentSelector.ExtractAvailableAgentsForOptimizer(boManager);
+        if (controllerSwitcher == null || controllerSwitcher.IsRLMode)
+        {
+            agentSelector.ExtractAvailableAgentsForOptimizer(boManager);
+        }
+        else
+        {
+            boManager.discreteChoices.Clear();
+        }
         
         studyDataHandler.StartCondition(participantID, condition);
         startupWindow.SetActive(false);
@@ -381,10 +392,13 @@ public class StudyController : MonoBehaviour
             agentSelector.SetValuesFromExternal(requestedSpeed, requestedDtc, requestedAccel, requestedSmooth);
         }
         
-        yield return new WaitUntil(() => !agentSelector.isUpdatingModel);
-        if (isPairwiseMode && car2 != null)
+        if (controllerSwitcher == null || controllerSwitcher.IsRLMode)
         {
-            yield return new WaitUntil(() => !agentSelector2.isUpdatingModel);
+            yield return new WaitUntil(() => !agentSelector.isUpdatingModel);
+            if (isPairwiseMode && car2 != null)
+            {
+                yield return new WaitUntil(() => !agentSelector2.isUpdatingModel);
+            }
         }
         
         currentSpeed = isPairwiseMode ? agentSelector2.targetSpeed : agentSelector.targetSpeed; 
@@ -397,8 +411,12 @@ public class StudyController : MonoBehaviour
         prevAccel = currentAcceleration;
         prevSmooth = currentSmoothness;
         
+        string activeControllerName = controllerSwitcher != null 
+            ? controllerSwitcher.GetActiveControllerLabel(agentSelector.CurrentLoadedModel) 
+            : agentSelector.CurrentLoadedModel;
+
         Debug.Log($"[BO Requested] -> Speed: {requestedSpeed}, Dist: {requestedDtc}, Accel: {requestedAccel}, Smooth: {requestedSmooth}");
-        Debug.Log($"[Nearest Model Loaded] -> {agentSelector.CurrentLoadedModel} (Speed: {currentSpeed}, Dist: {currentDistanceToCenter}, Accel: {currentAcceleration}, Smooth: {currentSmoothness})");
+        Debug.Log($"[Active Controller] -> {activeControllerName} (Speed: {currentSpeed}, Dist: {currentDistanceToCenter}, Accel: {currentAcceleration}, Smooth: {currentSmoothness})");
     }
     
     private IEnumerator CheckForFinishedLap()
@@ -456,9 +474,23 @@ public class StudyController : MonoBehaviour
         Rigidbody carRb = targetCar.GetComponent<Rigidbody>();
         RCC_CarControllerV4 rcc = targetCar.GetComponent<RCC_CarControllerV4>();
         DriveYourselfAgent agent = targetCar.GetComponentInChildren<DriveYourselfAgent>();
+        SimpleMPC simpleMpc = targetCar.GetComponentInChildren<SimpleMPC>();
+        DynamicMPC dynamicMpc = targetCar.GetComponentInChildren<DynamicMPC>();
         GetVehicleData vData = targetCar.GetComponentInChildren<GetVehicleData>();
         
-        agent.EndEpisode();
+        if (agent != null && agent.enabled)
+        {
+            agent.EndEpisode();
+        }
+        if (simpleMpc != null)
+        {
+            simpleMpc.ResetState();
+        }
+        if (dynamicMpc != null)
+        {
+            dynamicMpc.ResetState();
+        }
+        
         carRb.isKinematic = true;
         
         targetCar.transform.SetPositionAndRotation(startingPosition.position, startingPosition.rotation);
@@ -499,7 +531,12 @@ public class StudyController : MonoBehaviour
         int[] agentParams = new int[] { currentSpeed, currentDistanceToCenter, currentAcceleration, currentSmoothness };
         //int currentRound = (int)demoBoManager.ReturnIterations()[0];
         int currentRound = boManager.currentIteration;
-        studyDataHandler.LogRoundData(currentRound, agentSelector.CurrentLoadedModel, agentParams, feedback, transcript, audioFiles);
+
+        string loggedControllerName = controllerSwitcher != null 
+            ? controllerSwitcher.GetActiveControllerLabel(agentSelector.CurrentLoadedModel) 
+            : agentSelector.CurrentLoadedModel;
+
+        studyDataHandler.LogRoundData(currentRound, loggedControllerName, agentParams, feedback, transcript, audioFiles);
         
         boManager.optimizer.AddObjectiveValue("Likeness", feedback.likenessScore);
         if (feedback.speedAdjustment != ParameterAdjustment.Ignore) 

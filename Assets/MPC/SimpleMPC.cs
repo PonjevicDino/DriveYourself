@@ -204,6 +204,41 @@ public class SimpleMPC : MonoBehaviour
         
         carController.OverrideInputs(appliedInputs);
     }
+    
+    public void ApplyParameters(float newTargetSpeed, float newMaxDtC, float newAccelTime0to100, float smoothNormalized)
+    {
+        targetSpeed = Mathf.Clamp(newTargetSpeed, 30.0f, 150.0f);
+        maxDtC = Mathf.Clamp(newMaxDtC, 0.25f, 4.0f);
+        accelTime0to100 = Mathf.Clamp(newAccelTime0to100, 2.0f, 25.0f);
+        
+        steerSearchWindow = Mathf.Lerp(0.30f, 0.05f, smoothNormalized);
+        pedalSearchWindow = Mathf.Lerp(0.10f, 0.02f, smoothNormalized);
+        steerSmoothnessPenalty = Mathf.Lerp(5.0f, 80.0f, smoothNormalized);
+        pedalSmoothnessPenalty = Mathf.Lerp(50.0f, 250.0f, smoothNormalized);
+    }
+
+    void OnEnable()
+    {
+        if (carController == null && transform.parent != null)
+            carController = transform.parent.GetComponent<RCC_CarControllerV4>();
+
+        if (carController != null)
+        {
+            carController.overrideInputs = true;
+            bestSteer = carController.steerInput;
+            bestThrottle = carController.throttleInput;
+            bestBrake = carController.brakeInput;
+        }
+    }
+
+    void OnDisable()
+    {
+        if (isJobRunning)
+        {
+            mpcJobHandle.Complete();
+            isJobRunning = false;
+        }
+    }
 
     private void DrawTrajectories(float drawDuration, float calculatedMaxAccel)
     {
@@ -258,6 +293,25 @@ public class SimpleMPC : MonoBehaviour
         if (Input.GetKey(KeyCode.A)) inputs.steerInput = -maxManualInputSteer;
         else if (Input.GetKey(KeyCode.D)) inputs.steerInput = maxManualInputSteer;
         carController.OverrideInputs(inputs);
+    }
+    
+    public void ResetState()
+    {
+        if (isJobRunning)
+        {
+            mpcJobHandle.Complete();
+            isJobRunning = false;
+        }
+
+        bestSteer = 0f;
+        bestThrottle = 0f;
+        bestBrake = 0f;
+        timeSinceLastMpc = 0f;
+
+        if (carController != null)
+        {
+            carController.OverrideInputs(new RCC_Inputs());
+        }
     }
 
     [BurstCompile]
