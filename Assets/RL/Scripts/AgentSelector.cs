@@ -113,7 +113,14 @@ public class AgentSelector : MonoBehaviour
     public void ApplyToAllControllers()
     {
         ApplyMpcParameters();
-        FindAndAssignModel();
+        if (agent != null && agent.enabled)
+        {
+            FindAndAssignModel();
+        }
+        else
+        {
+            isUpdatingModel = false;
+        }
     }
 
     private void ApplyMpcParameters()

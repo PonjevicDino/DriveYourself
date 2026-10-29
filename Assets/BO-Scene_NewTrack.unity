@@ -2432,6 +2432,14 @@ PrefabInstance:
       propertyPath: drawSkid
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8573549318274349123, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: m_SuspensionSpring.damper
+      value: 1350
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549318274349123, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: m_SuspensionSpring.spring
+      value: 31500
+      objectReference: {fileID: 0}
     - target: {fileID: 8573549318363046129, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_IsActive
       value: 1
@@ -2451,6 +2459,14 @@ PrefabInstance:
     - target: {fileID: 8573549318809938867, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_IsActive
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549318991469426, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: m_SuspensionSpring.damper
+      value: 1350
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549318991469426, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: m_SuspensionSpring.spring
+      value: 31500
       objectReference: {fileID: 0}
     - target: {fileID: 8573549318991469429, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: drawSkid
@@ -2482,7 +2498,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: finalRatio
-      value: 1
+      value: 14.4
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: steerAngle
@@ -2502,7 +2518,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: brakeTorque
-      value: 2500
+      value: 4000
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: ABSThreshold
@@ -2510,7 +2526,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: maxEngineRPM
-      value: 9999
+      value: 23400
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: minEngineRPM
@@ -2521,8 +2537,16 @@ PrefabInstance:
       value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: automaticGear
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: clutchInertia
-      value: 0.9
+      value: 0.1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: engineInertia
+      value: 0.02
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: limitMaxSpeed
@@ -2534,7 +2558,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: useRevLimiter
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: engineCoolRate
@@ -2542,7 +2566,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: gearShiftUpRPM
-      value: 9998
+      value: 23399
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: steeringHelper
@@ -2558,7 +2582,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: maxEngineTorque
-      value: 500
+      value: 1400
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: useExhaustFlame
@@ -2578,6 +2602,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: interiorLightsOn
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gearShiftingDelay
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
@@ -2606,7 +2634,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: maxEngineTorqueAtRPM
-      value: 9999
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: gearShiftingThreshold
+      value: 0.25
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: useCollisionParticles
@@ -2642,11 +2674,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: gears.Array.data[0].maxRatio
-      value: 8
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: gears.Array.data[0].maxSpeed
-      value: 150
+      value: 250
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: gears.Array.data[1].maxRatio
@@ -2702,7 +2734,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: gears.Array.data[0].targetSpeedForNextGear
-      value: 180
+      value: 251
       objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884785, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: gears.Array.data[1].targetSpeedForNextGear
@@ -2804,6 +2836,10 @@ PrefabInstance:
       propertyPath: engineTorqueCurve.m_Curve.Array.data[2].tangentMode
       value: 34
       objectReference: {fileID: 0}
+    - target: {fileID: 8573549319431884786, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: rPMDial.multiplier
+      value: 0.01037
+      objectReference: {fileID: 0}
     - target: {fileID: 8573549319431884787, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -2848,6 +2884,14 @@ PrefabInstance:
       propertyPath: m_Name
       value: M3_E46_New
       objectReference: {fileID: 0}
+    - target: {fileID: 8573549319482302256, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: m_SuspensionSpring.damper
+      value: 1350
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319482302256, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: m_SuspensionSpring.spring
+      value: 31500
+      objectReference: {fileID: 0}
     - target: {fileID: 8573549319482302257, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: drawSkid
       value: 0
@@ -2859,6 +2903,14 @@ PrefabInstance:
     - target: {fileID: 8573549319622601076, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: drawSkid
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319622601077, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: m_SuspensionSpring.damper
+      value: 1350
+      objectReference: {fileID: 0}
+    - target: {fileID: 8573549319622601077, guid: f5b24270dd3a52e4180206467601e919, type: 3}
+      propertyPath: m_SuspensionSpring.spring
+      value: 31500
       objectReference: {fileID: 0}
     - target: {fileID: 8739069364677870248, guid: f5b24270dd3a52e4180206467601e919, type: 3}
       propertyPath: m_Enabled

@@ -108,10 +108,14 @@ public class SimpleMPC : MonoBehaviour
         EnsureInitialized();
         if (carController != null)
         {
-            carController.overrideInputs = true;
-            bestSteer = carController.steerInput;
-            bestThrottle = carController.throttleInput;
-            bestBrake = carController.brakeInput;
+            carController.overrideInputs = false;
+            carController.externalController = true;
+            if (!carRigidBody.isKinematic)
+            {
+                carController.throttleInput = bestThrottle;
+                carController.brakeInput = bestBrake;
+                carController.steerInput = bestSteer;
+            }
         }
         timeSinceLastMpc = 0f;
     }
@@ -247,7 +251,14 @@ public class SimpleMPC : MonoBehaviour
         appliedInputs.brakeInput = bestBrake;
         appliedInputs.steerInput = bestSteer;
         
-        carController.OverrideInputs(appliedInputs);
+        carController.overrideInputs = false;
+        carController.externalController = true;
+        if (!carRigidBody.isKinematic)
+        {
+            carController.throttleInput = bestThrottle;
+            carController.brakeInput = bestBrake;
+            carController.steerInput = bestSteer;
+        }
     }
     
     public void ApplyParameters(float newTargetSpeed, float newMaxDtC, float newAccelTime0to100, float smoothNormalized)

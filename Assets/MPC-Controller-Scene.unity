@@ -8299,7 +8299,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c6da34c2139a2104fa9892158f5c6f93, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SimpleMPC
-  manualControl: 1
+  manualControl: 0
   maxManualInputThrottle: 1
   maxManualInputBrake: 1
   maxManualInputSteer: 1
@@ -8327,17 +8327,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 03589f4e2d864000af7720ce17ec0f0f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DynamicMPC
-  manualControl: 1
+  manualControl: 0
   controlWithSteeringWheel: 1
   maxManualInputThrottle: 1
   maxManualInputBrake: 1
   maxManualInputSteer: 1
-  targetSpeed: 100
+  targetSpeed: 112
   maxDtC: 2
+  physicalTrackHalfWidth: 2.5
+  centerlinePullPenalty: 45
   minimumSpeed: 10
-  accelTime0to100: 10
-  decelTime100to0: 10
+  accelTime0to100: 15
+  decelTime100to0: 15
   tireFrictionCoeff: 1.15
+  maxGripThreshold: 0.92
   corneringStiffnessFront: 65000
   corneringStiffnessRear: 65000
   steerSearchWindow: 0.07
@@ -8349,6 +8352,9 @@ MonoBehaviour:
   steerControlSteps: 3
   timeStep: 0.1
   numSamples: 15625
+  enableConsoleLogging: 1
+  logIntervalSeconds: 0.25
+  showOnScreenTelemetry: 1
 --- !u!1001 &232636086
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -31466,7 +31472,7 @@ MonoBehaviour:
   version: 2
   globalVolume: 0
   mode: 1
-  size: {x: 618.08795, y: 3.1585948, z: 303.11725}
+  size: {x: 618.0879, y: 3.1585948, z: 303.11725}
   overrideRendererFilters: 0
   minRendererVolumeSize: 0.1
   objectLayerMask:
@@ -31504,7 +31510,7 @@ Transform:
   m_GameObject: {fileID: 1380958843}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -59.98535, y: 0.050000496, z: 67.47068}
+  m_LocalPosition: {x: -59.985382, y: 0.050000496, z: 67.47068}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

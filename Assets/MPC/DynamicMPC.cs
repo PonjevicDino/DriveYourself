@@ -18,25 +18,27 @@ public class DynamicMPC : MonoBehaviour
     [Header("Driving Style Boundaries")]
     [SerializeField, Range(30.0f, 150.0f)] private float targetSpeed = 100f;
     [SerializeField, Range(0.25f, 4.0f)] private float maxDtC = 2.0f;
+    [SerializeField, Tooltip("Physical half-width of the asphalt road (meters). Hard off-track penalty triggers beyond this.")]
+    [Range(1.5f, 5.0f)] private float physicalTrackHalfWidth = 2.5f;
     
-    [SerializeField, Tooltip("Gentle pull toward the center of the track ONLY on straightaways. Automatically turns off in curves.")]
-    [Range(0.0f, 200.0f)] private float centerlinePullPenalty = 45.0f;
+    [SerializeField, Tooltip("Pull toward the center of the track on straightaways. Scales with DtC strictness.")]
+    [Range(5.0f, 200.0f)] private float centerlinePullPenalty = 45.0f;
 
     [SerializeField, Tooltip("Heavy penalty applied if speed drops below this (prevents stopping out of bounds).")]
-    [Range(5.0f, 50.0f)] private float minimumSpeed = 10f;
+    [Range(5.0f, 50.0f)] private float minimumSpeed = 15f;
 
     [SerializeField, Tooltip("Desired 0-100 km/h acceleration time. The MPC tracks this exact acceleration ramp.")] 
     [Range(2.0f, 25.0f)] private float accelTime0to100 = 10.0f; 
 
-    [SerializeField, Tooltip("Desired 100-0 km/h deceleration time in seconds. MPC will try to brake this smoothly, but will brake harder if the physical corner requires it.")]
-    [Range(1.0f, 15.0f)] private float decelTime100to0 = 10.0f;
+    [SerializeField, Tooltip("Desired 100-0 km/h deceleration time in seconds.")]
+    [Range(1.0f, 15.0f)] private float decelTime100to0 = 4.5f;
 
     [Header("Dynamic Tire Physics")]
     [SerializeField, Tooltip("Maximum friction coefficient before tires slide. Standard tires = 0.9 to 1.1")]
     [Range(0.5f, 2.0f)] private float tireFrictionCoeff = 1.15f; 
     
     [SerializeField, Tooltip("How much of the tire's grip the MPC is allowed to use in corners. 0.85 = Conservative, 0.95 = Sporty.")]
-    [Range(0.7f, 1.0f)] private float maxGripThreshold = 0.90f; 
+    [Range(0.7f, 1.0f)] private float maxGripThreshold = 0.92f; 
 
     [SerializeField, Tooltip("Front Tire Cornering Stiffness (N/rad). Higher = sharper turn-in, less understeer.")]
     private float corneringStiffnessFront = 65000f;
@@ -45,15 +47,15 @@ public class DynamicMPC : MonoBehaviour
 
     [Header("MPC Tuning - Steering")]
     [SerializeField, Tooltip("Allowable steering change per tick.")] 
-    private float steerSearchWindow = 0.05f; 
+    private float steerSearchWindow = 0.06f; 
     [SerializeField, Tooltip("Penalty for twitchy steering.")] 
-    private float steerSmoothnessPenalty = 250.0f; 
+    private float steerSmoothnessPenalty = 180.0f; 
 
     [Header("MPC Tuning - Pedals")]
     [SerializeField, Tooltip("Allowable gas/brake change per tick.")] 
-    private float pedalSearchWindow = 0.05f; 
+    private float pedalSearchWindow = 0.08f; 
     [SerializeField, Tooltip("Penalty for stomping pedals.")] 
-    private float pedalSmoothnessPenalty = 100.0f; 
+    private float pedalSmoothnessPenalty = 80.0f; 
 
     [Header("MPC Settings")]
     [SerializeField, Range(1, 50)] private int mpcUpdatesPerSecond = 20;
@@ -64,6 +66,11 @@ public class DynamicMPC : MonoBehaviour
     [SerializeField, Range(0.02f, 0.2f)] private float timeStep = 0.1f;
     [SerializeField, Range(1000, 250000), Tooltip("Uses 2D Stratified Grid sampling. 15,625 (125x125) is optimal.")] 
     private int numSamples = 15625;
+
+    [Header("Diagnostics & Extended Logging")]
+    [SerializeField] private bool enableConsoleLogging = true;
+    [SerializeField, Range(0.05f, 2.0f)] private float logIntervalSeconds = 0.25f;
+    [SerializeField] private bool showOnScreenTelemetry = true;
 
     private RCC_CarControllerV4 carController;
     private RCC_LogitechSteeringWheel steeringWheel; 
@@ -85,10 +92,12 @@ public class DynamicMPC : MonoBehaviour
     private int allocatedSamples = 0;
     
     private float timeSinceLastMpc = 0f;
+    private float timeSinceLastLog = 0f;
     
     private float bestSteer = 0f;
     private float bestThrottle = 0f;
     private float bestBrake = 0f;
+    private float lastWinningCost = 0f;
     
     private float dynMass;
     private float dynYawInertia;
@@ -97,6 +106,26 @@ public class DynamicMPC : MonoBehaviour
     private float dynMaxBrakeForce;
     private float dynLf;
     private float dynLr;
+
+    private float cachedProfileTargetSpeed = -1f;
+    private float cachedProfileMinSpeed = -1f;
+    private float cachedProfileDecel = -1f;
+    private float cachedProfileGrip = -1f;
+
+    private string diagRegime = "INIT";
+    private float diagProfileSpeedKmh;
+    private float diagLocalCurveLimitKmh;
+    private float diagImmediateRefSpeedKmh;
+    private float diagHorizonEndSpeedKmh;
+    private float diagHorizonMinProfileKmh;
+    private float diagHorizonMaxDtC;
+    private float diagCurrentRadiusM;
+    private float diagMinAheadRadiusM;
+    private float diagTargetHeadingDeg;
+    private float diagActualHeadingDeg;
+    private float diagTargetLatVelMs;
+    private float diagActualLatVelMs;
+    private string lastFormattedTelemetry = "";
 
     private bool isInitialized = false;
 
@@ -120,15 +149,24 @@ public class DynamicMPC : MonoBehaviour
             vehicleData.roadLayout == null || vehicleData.roadLayout.trackSpline == null)
             return;
 
-        dynMass = carRigidBody.mass;
-        dynYawInertia = carRigidBody.inertiaTensor.y > 0 ? carRigidBody.inertiaTensor.y : (dynMass * 5.0f);
+        carController.overrideInputs = false;
+        carController.externalController = true;
+        carController.canGoReverseNow = false;
 
-        float wheelRadius = carController.FrontLeftWheelCollider.WheelCollider.radius;
-        float totalGearRatio = carController.gears[0].maxRatio * carController.finalRatio;
+        dynMass = carRigidBody.mass > 100f ? carRigidBody.mass : 1500f;
+        dynYawInertia = carRigidBody.inertiaTensor.y > 100f ? carRigidBody.inertiaTensor.y : (dynMass * 5.0f);
 
-        theoreticalMaxDriveForce = (carController.maxEngineTorque * totalGearRatio) / wheelRadius;
+        float wheelRadius = (carController.FrontLeftWheelCollider != null && carController.FrontLeftWheelCollider.WheelCollider != null)
+            ? carController.FrontLeftWheelCollider.WheelCollider.radius
+            : 0.34f;
+        float gear0Ratio = (carController.gears != null && carController.gears.Length > 0)
+            ? carController.gears[0].maxRatio
+            : 3.5f;
+        float totalGearRatio = gear0Ratio * carController.finalRatio;
+
+        theoreticalMaxDriveForce = (carController.maxEngineTorque * totalGearRatio) / Mathf.Max(0.1f, wheelRadius);
         calibratedDriveForce = Mathf.Min(theoreticalMaxDriveForce * 0.55f, tireFrictionCoeff * 9.81f * dynMass);
-        dynMaxBrakeForce = (carController.brakeTorque * 4.0f) / wheelRadius;
+        dynMaxBrakeForce = (carController.brakeTorque * 4.0f) / Mathf.Max(0.1f, wheelRadius);
 
         float wheelbase = 2.55f;
         dynLf = wheelbase * 0.5f;
@@ -137,7 +175,7 @@ public class DynamicMPC : MonoBehaviour
         if (!isSplineInitialized && vehicleData.roadLayout.trackSpline.Spline != null)
         {
             BakeTrackLookupTable();
-            UpdateBakedSpeedProfile();
+            UpdateBakedSpeedProfile(true);
             vehicleData.InitContinuousSplineState();
         }
 
@@ -159,19 +197,19 @@ public class DynamicMPC : MonoBehaviour
     {
         targetSpeed = Mathf.Clamp(newTargetSpeed, 30.0f, 150.0f);
         maxDtC = Mathf.Clamp(newMaxDtC, 0.25f, 4.0f);
-        centerlinePullPenalty = Mathf.Lerp(10.0f, 120.0f, Mathf.Clamp01(dtcWeightRatio));
+        centerlinePullPenalty = Mathf.Lerp(15.0f, 110.0f, Mathf.Clamp01(dtcWeightRatio));
 
         accelTime0to100 = Mathf.Clamp(newAccelTime0to100, 2.0f, 25.0f);
-        decelTime100to0 = Mathf.Clamp(newAccelTime0to100, 1.0f, 15.0f);
+        decelTime100to0 = Mathf.Clamp(newAccelTime0to100 * 0.45f, 3.0f, 5.5f);
         
-        steerSearchWindow = Mathf.Lerp(0.10f, 0.025f, smoothNormalized);
-        pedalSearchWindow = Mathf.Lerp(0.10f, 0.025f, smoothNormalized);
-        steerSmoothnessPenalty = Mathf.Lerp(80.0f, 500.0f, smoothNormalized);
-        pedalSmoothnessPenalty = Mathf.Lerp(40.0f, 250.0f, smoothNormalized);
+        steerSearchWindow = Mathf.Lerp(0.10f, 0.035f, smoothNormalized);
+        pedalSearchWindow = Mathf.Lerp(0.14f, 0.06f, smoothNormalized);
+        steerSmoothnessPenalty = Mathf.Lerp(80.0f, 320.0f, smoothNormalized);
+        pedalSmoothnessPenalty = Mathf.Lerp(30.0f, 140.0f, smoothNormalized);
 
         if (isSplineInitialized)
         {
-            UpdateBakedSpeedProfile();
+            UpdateBakedSpeedProfile(true);
         }
     }
     
@@ -184,7 +222,13 @@ public class DynamicMPC : MonoBehaviour
 
         if (carController != null)
         {
-            carController.OverrideInputs(new RCC_Inputs());
+            carController.overrideInputs = false;
+            carController.externalController = true;
+            carController.canGoReverseNow = false;
+            carController.currentGear = 0;
+            carController.throttleInput = 0f;
+            carController.brakeInput = 0f;
+            carController.steerInput = 0f;
         }
     }
 
@@ -195,7 +239,9 @@ public class DynamicMPC : MonoBehaviour
 
         if (carController != null)
         {
-            carController.overrideInputs = true;
+            carController.overrideInputs = false;
+            carController.externalController = true;
+            carController.canGoReverseNow = false;
             bestSteer = carController.steerInput;
             bestThrottle = carController.throttleInput;
             bestBrake = carController.brakeInput;
@@ -252,15 +298,29 @@ public class DynamicMPC : MonoBehaviour
         isSplineInitialized = true;
     }
     
-    private void UpdateBakedSpeedProfile()
+    private void UpdateBakedSpeedProfile(bool forceRebuild = false)
     {
         if (!isSplineInitialized) return;
+
+        if (!forceRebuild &&
+            Mathf.Approximately(cachedProfileTargetSpeed, targetSpeed) &&
+            Mathf.Approximately(cachedProfileMinSpeed, minimumSpeed) &&
+            Mathf.Approximately(cachedProfileDecel, decelTime100to0) &&
+            Mathf.Approximately(cachedProfileGrip, maxGripThreshold * tireFrictionCoeff))
+        {
+            return;
+        }
+
+        cachedProfileTargetSpeed = targetSpeed;
+        cachedProfileMinSpeed = minimumSpeed;
+        cachedProfileDecel = decelTime100to0;
+        cachedProfileGrip = maxGripThreshold * tireFrictionCoeff;
 
         float targetSpeedMs = targetSpeed / 3.6f;
         float minSpeedMs = minimumSpeed / 3.6f;
         float stepDist = Mathf.Max(0.05f, trackLength / LUT_SIZE);
 
-        float maxCornerLatAccel = maxGripThreshold * tireFrictionCoeff * 9.81f * 0.80f;
+        float maxCornerLatAccel = maxGripThreshold * tireFrictionCoeff * 9.81f * 0.85f;
 
         for (int i = 0; i < LUT_SIZE; i++)
         {
@@ -269,7 +329,7 @@ public class DynamicMPC : MonoBehaviour
             bakedMaxSpeeds[i] = Mathf.Clamp(vCorner, minSpeedMs, targetSpeedMs);
         }
 
-        int brakeBufferSteps = Mathf.Clamp(Mathf.RoundToInt(6.0f / stepDist), 1, 40);
+        int brakeBufferSteps = Mathf.Clamp(Mathf.RoundToInt(4.5f / stepDist), 1, 32);
         for (int step = 0; step < brakeBufferSteps; step++)
         {
             for (int i = 0; i < LUT_SIZE; i++)
@@ -283,9 +343,9 @@ public class DynamicMPC : MonoBehaviour
         }
 
         float userTargetDecel = (100f / 3.6f) / decelTime100to0;
-        float physicalBrakeDecel = (dynMaxBrakeForce / dynMass) * 0.65f;
-        float tireGripDecel = tireFrictionCoeff * 9.81f * 0.75f;
-        float effectiveProfileDecel = Mathf.Max(1.0f, Mathf.Min(userTargetDecel, Mathf.Min(physicalBrakeDecel, tireGripDecel)));
+        float physicalBrakeDecel = (dynMaxBrakeForce / Mathf.Max(1f, dynMass)) * 0.70f;
+        float tireGripDecel = tireFrictionCoeff * 9.81f * 0.80f;
+        float effectiveProfileDecel = Mathf.Max(2.5f, Mathf.Min(userTargetDecel, Mathf.Min(physicalBrakeDecel, tireGripDecel)));
 
         for (int pass = 0; pass < 2; pass++)
         {
@@ -350,6 +410,19 @@ public class DynamicMPC : MonoBehaviour
             return;
         }
 
+        if (carRigidBody.isKinematic)
+        {
+            return;
+        }
+
+        if (carRigidBody.inertiaTensor.y > 100f)
+        {
+            dynYawInertia = carRigidBody.inertiaTensor.y;
+        }
+
+        if (carController.overrideInputs) carController.overrideInputs = false;
+        if (!carController.externalController) carController.externalController = true;
+
         if (numSamples != allocatedSamples)
         {
             AllocateSampleArrays(numSamples);
@@ -369,6 +442,7 @@ public class DynamicMPC : MonoBehaviour
         }
 
         timeSinceLastMpc += Time.fixedDeltaTime;
+        timeSinceLastLog += Time.fixedDeltaTime;
         float mpcInterval = 1.0f / mpcUpdatesPerSecond;
 
         if (timeSinceLastMpc >= mpcInterval)
@@ -382,12 +456,14 @@ public class DynamicMPC : MonoBehaviour
             float userTargetDecel = (100f / 3.6f) / decelTime100to0;
             
             float wheelRadius = carController.FrontLeftWheelCollider.WheelCollider.radius;
-            dynMaxBrakeForce = (carController.brakeTorque * 4.0f) / wheelRadius;
+            dynMaxBrakeForce = (carController.brakeTorque * 4.0f) / Mathf.Max(0.1f, wheelRadius);
 
-            UpdateBakedSpeedProfile();
+            UpdateBakedSpeedProfile(false);
             
             int gridDim = Mathf.Max(11, Mathf.RoundToInt(Mathf.Sqrt(numSamples)));
             if ((gridDim & 1) == 0) gridDim--;
+
+            float hardTrackBoundary = Mathf.Max(maxDtC + 0.35f, physicalTrackHalfWidth);
 
             MpcEvaluationJob mpcJob = new MpcEvaluationJob
             {
@@ -423,6 +499,7 @@ public class DynamicMPC : MonoBehaviour
                 targetSpeedMs = targetSpeed / 3.6f,
                 minimumSpeedMs = minimumSpeed / 3.6f,
                 maxDtC = maxDtC,
+                hardTrackBoundary = hardTrackBoundary,
                 centerlinePullPenalty = centerlinePullPenalty,
                 userTargetAccel = userTargetAccel,
                 userTargetDecel = userTargetDecel,
@@ -463,19 +540,25 @@ public class DynamicMPC : MonoBehaviour
                     bestBrake = sequenceInputs[i].z;
                 }
             }
+            lastWinningCost = lowestCost;
 
-            DrawTrajectories(mpcInterval);
-            LogMpcState(userTargetAccel, userTargetDecel);
+            SimulateAndDrawWinningTrajectory(mpcInterval, userTargetAccel, userTargetDecel);
+
+            if (timeSinceLastLog >= logIntervalSeconds)
+            {
+                LogMpcDiagnostics(userTargetAccel, userTargetDecel);
+                timeSinceLastLog = 0f;
+            }
 
             timeSinceLastMpc = 0f;
         }
         
-        RCC_Inputs appliedInputs = new RCC_Inputs();
-        appliedInputs.throttleInput = bestThrottle;
-        appliedInputs.brakeInput = bestBrake;
-        appliedInputs.steerInput = bestSteer;
-        
-        carController.OverrideInputs(appliedInputs);
+        if (!carRigidBody.isKinematic)
+        {
+            carController.throttleInput = bestThrottle;
+            carController.brakeInput = bestBrake;
+            carController.steerInput = bestSteer;
+        }
         
         if (steeringWheel)
         {
@@ -483,7 +566,7 @@ public class DynamicMPC : MonoBehaviour
         }
     }
 
-    private void DrawTrajectories(float drawDuration)
+    private void SimulateAndDrawWinningTrajectory(float drawDuration, float userTargetAccel, float userTargetDecel)
     {
         float simX = transform.position.x;
         float simZ = transform.position.z;
@@ -499,16 +582,58 @@ public class DynamicMPC : MonoBehaviour
         int startIdx = (int)(math.frac(simT) * LUT_SIZE) & LUT_MASK;
         Vector3 lastGreenPoint = bakedPositions[startIdx];
 
+        float startCurvature = bakedCurvatures[startIdx];
+        diagCurrentRadiusM = startCurvature > 0.0005f ? (1.0f / startCurvature) : 9999f;
+        float maxCornerLatAccel = maxGripThreshold * tireFrictionCoeff * 9.81f * 0.85f;
+        diagLocalCurveLimitKmh = Mathf.Min(targetSpeed, Mathf.Sqrt(maxCornerLatAccel / Mathf.Max(startCurvature, 0.0001f)) * 3.6f);
+        diagProfileSpeedKmh = bakedMaxSpeeds[startIdx] * 3.6f;
+
+        float currentDtC = vehicleData.GetContinuousDtC();
+        float absStartDtC = Mathf.Abs(currentDtC);
+        float3 startFwd = bakedForwards[startIdx];
+        float3 startRight = bakedRights[startIdx];
+        Vector3 worldVelNow = carRigidBody.linearVelocity;
+        diagActualLatVelMs = Vector3.Dot(worldVelNow, startRight);
+
+        float startStraightness = Mathf.Clamp01(1.0f - (startCurvature * 35.0f));
+        float startBoundaryExcess = Mathf.Max(0f, absStartDtC - maxDtC);
+        float innerLatVel = -currentDtC * 0.22f * startStraightness;
+        float outerLatVel = -Mathf.Sign(currentDtC) * (startBoundaryExcess * 0.45f);
+        float maxLatSpeed = Mathf.Max(0.5f, Mathf.Abs(v_long) * 0.10f);
+        diagTargetLatVelMs = Mathf.Clamp(innerLatVel + outerLatVel, -maxLatSpeed, maxLatSpeed);
+
+        float innerPull = currentDtC * 0.04f * startStraightness;
+        float outerPull = Mathf.Sign(currentDtC) * (startBoundaryExcess * 0.12f);
+        float startInterceptPull = Mathf.Clamp(-(innerPull + outerPull), -0.22f, 0.22f);
+        diagTargetHeadingDeg = Mathf.Atan(startInterceptPull) * Mathf.Rad2Deg;
+
+        Vector3 carFwdNow = transform.forward;
+        diagActualHeadingDeg = Vector3.SignedAngle(new Vector3(startFwd.x, 0f, startFwd.z), new Vector3(carFwdNow.x, 0f, carFwdNow.z), Vector3.up);
+
+        float refSpeed = Mathf.Max(minimumSpeed / 3.6f, v_long);
+        float step0TargetSpeed = bakedMaxSpeeds[startIdx];
+        if (refSpeed < step0TargetSpeed)
+            diagImmediateRefSpeedKmh = Mathf.Min(step0TargetSpeed, refSpeed + userTargetAccel * timeStep) * 3.6f;
+        else
+            diagImmediateRefSpeedKmh = Mathf.Max(step0TargetSpeed, refSpeed - userTargetDecel * timeStep) * 3.6f;
+
         float currentStepSteer = bestSteer;
         float maxGrip = tireFrictionCoeff * 9.81f * dynMass;
         const int physicsSubSteps = 2;
         float subDt = timeStep / physicsSubSteps;
+
+        diagHorizonMaxDtC = absStartDtC;
+        diagHorizonMinProfileKmh = diagProfileSpeedKmh;
+        float maxCurvatureAhead = startCurvature;
 
         for (int step = 0; step < horizonSteps; step++)
         {
             int curIdx = (int)(simT * LUT_SIZE) & LUT_MASK;
             float trackCurvature = bakedCurvatures[curIdx];
             float stepTargetSpeed = bakedMaxSpeeds[curIdx];
+            maxCurvatureAhead = Mathf.Max(maxCurvatureAhead, trackCurvature);
+            diagHorizonMinProfileKmh = Mathf.Min(diagHorizonMinProfileKmh, stepTargetSpeed * 3.6f);
+
             float steerAngle = currentStepSteer * carController.steerAngle * Mathf.Deg2Rad;
 
             for (int sub = 0; sub < physicsSubSteps; sub++)
@@ -522,21 +647,28 @@ public class DynamicMPC : MonoBehaviour
                 float dragForce = (0.015f * 9.81f * dynMass) + (0.4f * v_long * v_long);
                 
                 float effectiveThrottle = bestThrottle;
-                if (step >= 8 && v_long >= stepTargetSpeed && bestBrake == 0f)
+                float effectiveBrake = bestBrake;
+                if (step >= steerControlSteps && v_long >= stepTargetSpeed && bestBrake == 0f)
                 {
                     effectiveThrottle = Mathf.Min(bestThrottle, Mathf.Clamp01(dragForce / calibratedDriveForce));
+                    float speedExcess = v_long - stepTargetSpeed;
+                    if (speedExcess > 0.5f)
+                    {
+                        effectiveThrottle = 0f;
+                        effectiveBrake = Mathf.Clamp((speedExcess * 2.5f * dynMass) / dynMaxBrakeForce, 0f, 0.85f);
+                    }
                 }
 
-                float rawFx = (effectiveThrottle * calibratedDriveForce) - (bestBrake * dynMaxBrakeForce);
+                float rawFx = (effectiveThrottle * calibratedDriveForce) - (effectiveBrake * dynMaxBrakeForce);
                 float clampedFx = Mathf.Clamp(rawFx, -maxGrip, maxGrip);
                 float longGripRatio = Mathf.Abs(clampedFx) / maxGrip;
-                float latGripScale = Mathf.Sqrt(Mathf.Max(0.25f, 1.0f - longGripRatio * longGripRatio * 0.70f));
+                float latGripScale = Mathf.Sqrt(Mathf.Max(0.35f, 1.0f - longGripRatio * longGripRatio * 0.60f));
 
                 float FyF = Mathf.Clamp(-corneringStiffnessFront * alphaF, -maxGrip * 0.5f * latGripScale, maxGrip * 0.5f * latGripScale);
                 float FyR = Mathf.Clamp(-corneringStiffnessRear * alphaR, -maxGrip * 0.5f * latGripScale, maxGrip * 0.5f * latGripScale);
 
                 float Fx = clampedFx - dragForce;
-                if (v_long < 0.1f && bestBrake > 0f) Fx = 0f;
+                if (v_long < 0.1f && effectiveBrake > 0f) Fx = 0f;
 
                 float a_long = (Fx - FyF * Mathf.Sin(steerAngle)) / dynMass + v_lat * yaw_rate;
                 float a_lat = (FyF * Mathf.Cos(steerAngle) + FyR) / dynMass - v_long * yaw_rate;
@@ -571,23 +703,20 @@ public class DynamicMPC : MonoBehaviour
             float lonError = math.dot(deltaPos, trackForward);
             simT = math.frac(simT + (lonError * 0.5f) / trackLength);
 
+            float signedDtC = math.dot(deltaPos, targetRight);
+            diagHorizonMaxDtC = Mathf.Max(diagHorizonMaxDtC, Mathf.Abs(signedDtC));
+
             Debug.DrawLine(lastGreenPoint, targetPos, Color.green, drawDuration);
             lastGreenPoint = targetPos;
 
             if (step + 1 >= steerControlSteps)
             {
-                float signedDtC = math.dot(deltaPos, targetRight);
                 float absDtC = math.abs(signedDtC);
-                
                 float straightness = Mathf.Clamp01(1.0f - (trackCurvature * 35.0f));
-                float gentleCenterPull = -signedDtC * 0.08f * straightness;
-
-                float interceptPull = gentleCenterPull;
-                if (absDtC > maxDtC * 0.5f)
-                {
-                    float excess = (absDtC - maxDtC * 0.5f) / math.max(0.5f, maxDtC);
-                    interceptPull = -math.sign(signedDtC) * math.clamp(excess, 0f, 1.0f);
-                }
+                float boundaryExcess = math.max(0f, absDtC - maxDtC);
+                float stepInnerPull = signedDtC * 0.04f * straightness;
+                float stepOuterPull = math.sign(signedDtC) * (boundaryExcess * 0.12f);
+                float interceptPull = math.clamp(-(stepInnerPull + stepOuterPull), -0.22f, 0.22f);
 
                 float3 desiredForward = math.normalize(trackForward + targetRight * interceptPull);
                 float3 carForward = new float3(math.sin(simYaw), 0f, math.cos(simYaw));
@@ -597,28 +726,74 @@ public class DynamicMPC : MonoBehaviour
                 float cosErr = math.dot(desiredForward, carForward);
                 float signedAngleErr = math.atan2(sinErr, cosErr);
 
-                float speedSteerScale = 1.0f / (1.0f + 0.04f * Mathf.Max(0f, v_long));
+                float speedSteerScale = 1.0f / (1.0f + 0.035f * Mathf.Max(0f, v_long));
                 float yawDamping = yaw_rate * 0.18f;
                 float desiredFutureSteer = math.clamp(((signedAngleErr / (carController.steerAngle * Mathf.Deg2Rad)) * speedSteerScale) - yawDamping, -1f, 1f);
                 currentStepSteer = math.clamp(desiredFutureSteer, currentStepSteer - 0.12f, currentStepSteer + 0.12f);
             }
         }
+
+        diagHorizonEndSpeedKmh = v_long * 3.6f;
+        diagMinAheadRadiusM = maxCurvatureAhead > 0.0005f ? (1.0f / maxCurvatureAhead) : 9999f;
+
+        float actualSpeedKmh = carController.speed;
+        if (absStartDtC > maxDtC)
+            diagRegime = "CORRIDOR RECOVERY (OUTSIDE DtC)";
+        else if (diagProfileSpeedKmh < diagLocalCurveLimitKmh - 3.0f && actualSpeedKmh > diagProfileSpeedKmh + 2.0f)
+            diagRegime = "BRAKING FOR UPCOMING CURVE";
+        else if (diagLocalCurveLimitKmh < targetSpeed - 2.0f && Mathf.Abs(actualSpeedKmh - diagLocalCurveLimitKmh) < 8.0f)
+            diagRegime = "CORNERING (CURVATURE SPEED LIMIT)";
+        else if (actualSpeedKmh < diagProfileSpeedKmh - 3.0f)
+            diagRegime = "ACCELERATING ON RAMP";
+        else
+            diagRegime = "CRUISING AT TARGET SPEED";
     }
 
-    private void LogMpcState(float userTargetAccel, float userTargetDecel)
+    private void LogMpcDiagnostics(float userTargetAccel, float userTargetDecel)
     {
+        float actualSpeedKmh = carController.speed;
         float currentDtC = vehicleData.GetContinuousDtC();
-        int curIdx = (int)(math.frac(vehicleData.GetCurrentSplineT()) * LUT_SIZE) & LUT_MASK;
-        float profileSpeedKmh = bakedMaxSpeeds[curIdx] * 3.6f;
+        Vector3 accelVec = vehicleData.GetAccellerationVector();
+        float actualLongAccel = accelVec.z;
+        float actualLatAccel = accelVec.x;
 
-        Debug.Log($"<color=#00FF00><b>MPC OUTPUT</b></color> | Thr: {bestThrottle:F3}, Brk: {bestBrake:F3}, Str: {bestSteer:F3}\n" +
-                  $"<color=#00FFFF><b>VEHICLE STATE</b></color> | Speed: {carController.speed:F1} km/h (Profile Limit: {profileSpeedKmh:F1} km/h), Signed DtC: {currentDtC:F2}m\n" +
-                  $"<color=#FFA500><b>ACCEL TRACKING</b></color> | Target Accel: {userTargetAccel:F2} m/s² | Target Decel: {userTargetDecel:F2} m/s² | Physical Brake Limit: {dynMaxBrakeForce:F0}N");
+        float desiredLongAccel = (actualSpeedKmh < diagProfileSpeedKmh - 1.0f)
+            ? userTargetAccel
+            : (actualSpeedKmh > diagProfileSpeedKmh + 1.0f ? -userTargetDecel : 0.0f);
+
+        lastFormattedTelemetry =
+            $"<b>[MPC REGIME: {diagRegime}]</b> (Cost: {lastWinningCost:F0})\n" +
+            $"<b>1. SPEED (km/h)</b>    | Actual: <b>{actualSpeedKmh:F1}</b> | Step-1 Ref: <b>{diagImmediateRefSpeedKmh:F1}</b> | Profile Limit: <b>{diagProfileSpeedKmh:F1}</b> | Local Curve Max: <b>{diagLocalCurveLimitKmh:F1}</b> | User Target: <b>{targetSpeed:F0}</b>\n" +
+            $"<b>2. HORIZON (3.0s)</b>  | Pred End Speed: <b>{diagHorizonEndSpeedKmh:F1} km/h</b> | Min Profile Ahead: <b>{diagHorizonMinProfileKmh:F1} km/h</b> | Curve Radius Now/Ahead: <b>{diagCurrentRadiusM:F0}m / {diagMinAheadRadiusM:F0}m</b>\n" +
+            $"<b>3. LATERAL & YAW</b>   | Signed DtC: <b>{currentDtC:+0.00;-0.00;0.00}m</b> (Max: ±{maxDtC:F2}m, Pred Peak: {diagHorizonMaxDtC:F2}m) | LatVel: <b>{diagActualLatVelMs:+0.00;-0.00;0.00} m/s</b> (Target: {diagTargetLatVelMs:+0.00;-0.00;0.00}) | Heading: <b>{diagActualHeadingDeg:+0.0;-0.0;0.0}°</b> (Target: {diagTargetHeadingDeg:+0.0;-0.0;0.0}°)\n" +
+            $"<b>4. ACCEL & INPUTS</b> | Long Accel: <b>{actualLongAccel:+0.00;-0.00;0.00} m/s²</b> (Target: {desiredLongAccel:+0.00;-0.00;0.00}) | Lat Accel: <b>{actualLatAccel:F2} m/s²</b> | Thr: <b>{bestThrottle:F3}</b>, Brk: <b>{bestBrake:F3}</b>, Str: <b>{bestSteer:+0.000;-0.000;0.000}</b>";
+
+        if (enableConsoleLogging)
+        {
+            Debug.Log($"<color=#00FF88>[DynamicMPC Diagnostics]</color> {lastFormattedTelemetry}");
+        }
+    }
+
+    void OnGUI()
+    {
+        if (!showOnScreenTelemetry || manualControl || string.IsNullOrEmpty(lastFormattedTelemetry)) return;
+
+        GUIStyle boxStyle = new GUIStyle(GUI.skin.box);
+        boxStyle.alignment = TextAnchor.UpperLeft;
+        boxStyle.fontSize = 12;
+        boxStyle.richText = true;
+        boxStyle.normal.textColor = Color.white;
+
+        GUI.Box(new Rect(15, 15, 900, 80), lastFormattedTelemetry, boxStyle);
     }
 
     private void ManualControl()
     {
-        RCC_Inputs inputs = new RCC_Inputs();
+        if (carController == null) return;
+        carController.overrideInputs = false;
+        carController.externalController = true;
+
+        float thr = 0f, brk = 0f, str = 0f, hbrk = 0f;
         
         if (controlWithSteeringWheel)
         {
@@ -629,22 +804,25 @@ public class DynamicMPC : MonoBehaviour
 
             if (vehicleInputManager != null)
             {
-                inputs.throttleInput = vehicleInputManager.inputs.throttleInput;
-                inputs.brakeInput = vehicleInputManager.inputs.brakeInput;
-                inputs.steerInput = vehicleInputManager.inputs.steerInput;
-                inputs.handbrakeInput = vehicleInputManager.inputs.handbrakeInput;
+                thr = vehicleInputManager.inputs.throttleInput;
+                brk = vehicleInputManager.inputs.brakeInput;
+                str = vehicleInputManager.inputs.steerInput;
+                hbrk = vehicleInputManager.inputs.handbrakeInput;
             }
         }
         else
         {
-            if (Input.GetKey(KeyCode.W)) inputs.throttleInput = maxManualInputThrottle;
-            else if (Input.GetKey(KeyCode.S)) inputs.brakeInput = maxManualInputBrake;
-            if (Input.GetKey(KeyCode.A)) inputs.steerInput = -maxManualInputSteer;
-            else if (Input.GetKey(KeyCode.D)) inputs.steerInput = maxManualInputSteer;
-            if (Input.GetKey(KeyCode.Space)) inputs.handbrakeInput = 1.0f;
+            if (Input.GetKey(KeyCode.W)) thr = maxManualInputThrottle;
+            else if (Input.GetKey(KeyCode.S)) brk = maxManualInputBrake;
+            if (Input.GetKey(KeyCode.A)) str = -maxManualInputSteer;
+            else if (Input.GetKey(KeyCode.D)) str = maxManualInputSteer;
+            if (Input.GetKey(KeyCode.Space)) hbrk = 1.0f;
         }
         
-        carController.OverrideInputs(inputs);
+        carController.throttleInput = thr;
+        carController.brakeInput = brk;
+        carController.steerInput = str;
+        carController.handbrakeInput = hbrk;
     }
 
     [BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
@@ -663,7 +841,7 @@ public class DynamicMPC : MonoBehaviour
         
         public float mass, yawInertia, Lf, Lr, maxDriveForce, maxBrakeForce, Cf, Cr, frictionLimit, maxGripThreshold;
         
-        public float targetSpeedMs, minimumSpeedMs, maxDtC, centerlinePullPenalty, userTargetAccel, userTargetDecel;
+        public float targetSpeedMs, minimumSpeedMs, maxDtC, hardTrackBoundary, centerlinePullPenalty, userTargetAccel, userTargetDecel;
         public float steerSearchWindow, pedalSearchWindow;
         public float steerSmoothnessPenalty, pedalSmoothnessPenalty;
         
@@ -698,29 +876,30 @@ public class DynamicMPC : MonoBehaviour
             float lastPedal = lastThrottle - lastBrake;
             
             int totalGridCells = gridDim * gridDim;
-            bool isOutOfBounds = math.abs(currentSignedDtC) > maxDtC;
+            bool isSeverelyOffTrack = math.abs(currentSignedDtC) > hardTrackBoundary;
 
-            float dynamicSteerWindow = steerSearchWindow + (math.abs(lastSteer) * 0.05f);
+            float minPedalDelta = -pedalSearchWindow;
+            float maxPedalDelta = (lastPedal < 0f) ? math.max(pedalSearchWindow * 2.0f, 0.15f) : pedalSearchWindow;
 
             float candidateSteer;
             float candidatePedal;
 
-            if (index < totalGridCells && !isOutOfBounds)
+            if (index < totalGridCells && !isSeverelyOffTrack)
             {
                 int gx = index % gridDim;
                 int gy = index / gridDim;
                 float u = (float)gx / math.max(1, gridDim - 1);
                 float v = (float)gy / math.max(1, gridDim - 1);
 
-                candidateSteer = math.clamp(lastSteer + math.lerp(-dynamicSteerWindow, dynamicSteerWindow, u), -1f, 1f);
-                candidatePedal = math.clamp(lastPedal + math.lerp(-pedalSearchWindow, pedalSearchWindow, v), -1f, 1f);
+                candidateSteer = math.clamp(lastSteer + math.lerp(-steerSearchWindow, steerSearchWindow, u), -1f, 1f);
+                candidatePedal = math.clamp(lastPedal + math.lerp(minPedalDelta, maxPedalDelta, v), -1f, 1f);
             }
             else
             {
                 float u = rand.NextFloat();
                 float v = rand.NextFloat();
-                float wideSteerWindow = isOutOfBounds ? math.max(steerSearchWindow * 3.0f, 0.35f) : dynamicSteerWindow * 1.4f;
-                float widePedalWindow = pedalSearchWindow * 1.5f;
+                float wideSteerWindow = isSeverelyOffTrack ? math.max(steerSearchWindow * 2.0f, 0.20f) : steerSearchWindow;
+                float widePedalWindow = pedalSearchWindow * 1.8f;
 
                 candidateSteer = math.clamp(lastSteer + math.lerp(-wideSteerWindow, wideSteerWindow, u), -1f, 1f);
                 candidatePedal = math.clamp(lastPedal + math.lerp(-widePedalWindow, widePedalWindow, v), -1f, 1f);
@@ -730,7 +909,7 @@ public class DynamicMPC : MonoBehaviour
             {
                 candidatePedal = math.max(0.25f, math.abs(candidatePedal));
             }
-            else if (isOutOfBounds && currentVlong < minimumSpeedMs * 1.35f)
+            else if (isSeverelyOffTrack && currentVlong < minimumSpeedMs * 1.35f)
             {
                 candidatePedal = math.max(0.15f, candidatePedal);
             }
@@ -741,8 +920,8 @@ public class DynamicMPC : MonoBehaviour
             float steerJerk = math.abs(candidateSteer - lastSteer);
             float pedalJerk = math.abs(candidatePedal - lastPedal);
             
-            float highSpeedSteerScale = 1.0f + (math.max(0f, currentVlong) * 0.06f) + (candidateBrake * 2.5f);
-            sequenceCost += ((steerJerk + steerJerk * steerJerk * 10.0f) * steerSmoothnessPenalty * highSpeedSteerScale) + (pedalJerk * pedalSmoothnessPenalty);
+            float highSpeedSteerScale = 1.0f + (math.max(0f, currentVlong) * 0.05f) + (candidateBrake * 1.5f);
+            sequenceCost += ((steerJerk + steerJerk * steerJerk * 12.0f) * steerSmoothnessPenalty * highSpeedSteerScale) + (pedalJerk * pedalSmoothnessPenalty);
 
             float currentStepSteer = candidateSteer;
             
@@ -754,6 +933,7 @@ public class DynamicMPC : MonoBehaviour
             float maxFyF = frictionLimit * (Lr / wheelbase);
             float maxFyR = frictionLimit * (Lf / wheelbase);
             float baseRollingDrag = 0.015f * 9.81f * mass;
+            float maxAllowedLatAccel = (frictionLimit / mass) * maxGripThreshold;
 
             float refSpeed = math.max(minimumSpeedMs, currentVlong);
 
@@ -766,10 +946,13 @@ public class DynamicMPC : MonoBehaviour
 
                 float trackCurvature = math.lerp(bakedCurvatures[sIdx0], bakedCurvatures[sIdx1], sFrac);
                 float stepMaxSpeed = math.lerp(bakedMaxSpeeds[sIdx0], bakedMaxSpeeds[sIdx1], sFrac);
+                
                 float straightnessFactor = math.saturate(1.0f - (trackCurvature * 35.0f));
 
                 float steerAngle = currentStepSteer * steerAngleLimit;
                 float stepAlong = 0f;
+                float stepAlat = 0f;
+                float stepYawAccel = 0f;
                 float globalVx = 0f;
                 float globalVz = 0f;
                 math.sincos(steerAngle, out float sinSteer, out float cosSteer);
@@ -784,35 +967,35 @@ public class DynamicMPC : MonoBehaviour
                     float dragForce = baseRollingDrag + (0.4f * v_long * v_long);
                     
                     float effectiveThrottle = candidateThrottle;
-                    if (step >= 8 && v_long >= stepMaxSpeed && candidateBrake == 0f)
+                    float effectiveBrake = candidateBrake;
+
+                    if (step >= steerControlSteps && v_long >= stepMaxSpeed && candidateBrake == 0f)
                     {
                         float cruiseThrottle = math.clamp(dragForce / maxDriveForce, 0f, 1f);
                         effectiveThrottle = math.min(candidateThrottle, cruiseThrottle);
+
+                        float speedExcess = v_long - stepMaxSpeed;
+                        if (speedExcess > 0.5f)
+                        {
+                            effectiveThrottle = 0f;
+                            effectiveBrake = math.clamp((speedExcess * 2.5f * mass) / maxBrakeForce, 0f, 0.85f);
+                        }
                     }
 
-                    float rawFx = (effectiveThrottle * maxDriveForce) - (candidateBrake * maxBrakeForce);
+                    float rawFx = (effectiveThrottle * maxDriveForce) - (effectiveBrake * maxBrakeForce);
                     float clampedFx = math.clamp(rawFx, -frictionLimit, frictionLimit);
 
                     float longGripUsage = math.abs(clampedFx) / frictionLimit;
-                    float latGripScale = math.sqrt(math.max(0.25f, 1.0f - (longGripUsage * longGripUsage * 0.70f)));
+                    float latGripScale = math.sqrt(math.max(0.35f, 1.0f - (longGripUsage * longGripUsage * 0.60f)));
 
                     float rawFyF = -Cf * alphaF;
                     float rawFyR = -Cr * alphaR;
-                    
-                    float gripUsageF = math.abs(rawFyF) / maxFyF;
-                    float gripUsageR = math.abs(rawFyR) / maxFyR;
-                    float maxGripUsage = math.max(gripUsageF, gripUsageR);
-                    
-                    if (maxGripUsage > maxGripThreshold && v_long > 6.0f)
-                    {
-                        sequenceCost += (maxGripUsage - maxGripThreshold) * 25000.0f;
-                    }
 
                     float FyF = math.clamp(rawFyF, -maxFyF * latGripScale, maxFyF * latGripScale);
                     float FyR = math.clamp(rawFyR, -maxFyR * latGripScale, maxFyR * latGripScale);
 
                     float Fx = clampedFx - dragForce;
-                    if (v_long < 0.1f && candidateBrake > 0f) Fx = 0f;
+                    if (v_long < 0.1f && effectiveBrake > 0f) Fx = 0f;
 
                     float a_long = (Fx - FyF * sinSteer) / mass + v_lat * yaw_rate;
                     float a_lat = (FyF * cosSteer + FyR) / mass - v_long * yaw_rate;
@@ -838,6 +1021,15 @@ public class DynamicMPC : MonoBehaviour
                     simX += globalVx * subDt;
                     simZ += globalVz * subDt;
                     stepAlong = a_long;
+                    stepAlat = (FyF * cosSteer + FyR) / mass;
+                    stepYawAccel = yaw_accel;
+                }
+
+                float absLatG = math.abs(stepAlat);
+                if (absLatG > maxAllowedLatAccel)
+                {
+                    float overGrip = (absLatG - maxAllowedLatAccel) / math.max(1.0f, maxAllowedLatAccel);
+                    sequenceCost += overGrip * overGrip * 12000.0f;
                 }
                 
                 simT = math.frac(simT + (v_long * timeStep) * invTrackLength);
@@ -860,43 +1052,33 @@ public class DynamicMPC : MonoBehaviour
                 float absDtC = math.abs(signedDtC);
                 
                 float3 worldVel = new float3(globalVx, 0f, globalVz);
-                float latVelAwayFromCenter = math.dot(worldVel, math.sign(signedDtC) * targetRight);
-                
+                float trackLatVel = math.dot(worldVel, targetRight);
+
                 sequenceCost += (signedDtC * signedDtC) * centerlinePullPenalty * straightnessFactor;
-                
-                if (step < steerControlSteps)
+
+                float boundaryExcess = math.max(0f, absDtC - maxDtC);
+                float innerLatVel = -signedDtC * 0.22f * straightnessFactor;
+                float outerLatVel = -math.sign(signedDtC) * (boundaryExcess * 0.45f);
+                float maxConvergenceLatSpeed = math.max(0.5f, v_long * 0.10f);
+                float desiredLatVel = math.clamp(innerLatVel + outerLatVel, -maxConvergenceLatSpeed, maxConvergenceLatSpeed);
+                float latVelError = trackLatVel - desiredLatVel;
+                sequenceCost += (latVelError * latVelError) * 35.0f;
+
+                if (boundaryExcess > 0f)
                 {
-                    sequenceCost += math.abs(yaw_rate) * straightnessFactor * (45.0f + candidateBrake * 90.0f);
+                    sequenceCost += (boundaryExcess * boundaryExcess) * 2800.0f;
                 }
 
-                if (absDtC > maxDtC * 0.65f)
+                if (absDtC > hardTrackBoundary)
                 {
-                    float marginExcess = absDtC - (maxDtC * 0.65f);
-                    sequenceCost += (marginExcess * marginExcess) * 1500.0f;
-
-                    if (latVelAwayFromCenter > 0f)
-                    {
-                        sequenceCost += latVelAwayFromCenter * marginExcess * 500.0f;
-                    }
+                    float offTrackExcess = absDtC - hardTrackBoundary;
+                    float horizonDiscount = (step < 12) ? 1.0f : 0.25f;
+                    sequenceCost += (200000.0f + offTrackExcess * 30000.0f) * horizonDiscount;
                 }
 
-                float gentleCenterPull = -signedDtC * 0.08f * straightnessFactor;
-                float interceptPull = gentleCenterPull;
-
-                if (absDtC > maxDtC)
-                {
-                    float excessDist = absDtC - maxDtC;
-                    interceptPull = -math.sign(signedDtC) * math.clamp(excessDist * 0.5f, 0f, 1.0f);
-                    
-                    sequenceCost += 500000.0f + (excessDist * 50000.0f);
-                    sequenceCost -= (-latVelAwayFromCenter) * 1500.0f;
-                }
-                else if (absDtC > maxDtC * 0.65f)
-                {
-                    float excess = (absDtC - maxDtC * 0.65f) / math.max(0.5f, maxDtC);
-                    interceptPull = -math.sign(signedDtC) * math.clamp(excess * 0.6f, 0f, 0.6f);
-                }
-
+                float innerPull = signedDtC * 0.04f * straightnessFactor;
+                float outerPull = math.sign(signedDtC) * (boundaryExcess * 0.12f);
+                float interceptPull = math.clamp(-(innerPull + outerPull), -0.22f, 0.22f);
                 float3 desiredForward = math.normalize(trackForward + targetRight * interceptPull);
 
                 math.sincos(simYaw, out float carSinYaw, out float carCosYaw);
@@ -904,11 +1086,17 @@ public class DynamicMPC : MonoBehaviour
                 float3 carRight = new float3(carCosYaw, 0f, -carSinYaw);
 
                 float headingError = 1.0f - math.dot(desiredForward, carForward); 
-                float headingWeight = (step < steerControlSteps) ? 1000.0f : 350.0f;
+                float headingWeight = (step < steerControlSteps) ? 950.0f : 380.0f;
                 sequenceCost += headingError * headingWeight; 
 
-                float effectiveTargetSpeed = (absDtC > maxDtC) 
-                    ? math.min(stepMaxSpeed, math.max(minimumSpeedMs * 1.4f, 12.0f)) 
+                if (step < steerControlSteps)
+                {
+                    sequenceCost += math.abs(yaw_rate) * straightnessFactor * (40.0f + candidateBrake * 80.0f);
+                    sequenceCost += (stepYawAccel * stepYawAccel) * 4.0f;
+                }
+
+                float effectiveTargetSpeed = (absDtC > hardTrackBoundary) 
+                    ? math.min(stepMaxSpeed, math.max(minimumSpeedMs * 1.4f, 14.0f)) 
                     : stepMaxSpeed;
 
                 if (refSpeed < effectiveTargetSpeed)
@@ -923,21 +1111,17 @@ public class DynamicMPC : MonoBehaviour
                 refSpeed = math.min(refSpeed, effectiveTargetSpeed);
 
                 float speedError = math.abs(refSpeed - v_long);
-                sequenceCost += speedError * 40.0f;
+                sequenceCost += speedError * 65.0f;
                 
                 if (v_long > effectiveTargetSpeed)
                 {
                     float overSpeed = v_long - effectiveTargetSpeed;
-                    sequenceCost += (overSpeed + overSpeed * overSpeed) * 150.0f;
+                    sequenceCost += (overSpeed + overSpeed * overSpeed) * 180.0f;
                 }
 
                 if (stepAlong > userTargetAccel)
                 {
-                    sequenceCost += (stepAlong - userTargetAccel) * 400.0f; 
-                }
-                if (stepAlong < -userTargetDecel)
-                {
-                    sequenceCost += (math.abs(stepAlong) - userTargetDecel) * 400.0f; 
+                    sequenceCost += (stepAlong - userTargetAccel) * 350.0f; 
                 }
                 
                 if (v_long < minimumSpeedMs)
@@ -948,25 +1132,14 @@ public class DynamicMPC : MonoBehaviour
                 
                 if (step + 1 >= steerControlSteps)
                 {
-                    float lookaheadPull = gentleCenterPull;
-                    if (absDtC > maxDtC * 0.5f)
-                    {
-                        float excess = (absDtC - maxDtC * 0.5f) / math.max(0.5f, maxDtC);
-                        lookaheadPull = -math.sign(signedDtC) * math.clamp(excess, 0f, 1.0f);
-                    }
-
-                    float3 lookaheadForward = math.normalize(trackForward + targetRight * lookaheadPull);
-                    float sinErr = math.dot(lookaheadForward, carRight);
-                    float cosErr = math.dot(lookaheadForward, carForward);
+                    float sinErr = math.dot(desiredForward, carRight);
+                    float cosErr = math.dot(desiredForward, carForward);
                     float signedAngleErr = math.atan2(sinErr, cosErr);
 
-                    float speedSteerScale = 1.0f / (1.0f + 0.04f * math.max(0f, v_long));
+                    float speedSteerScale = 1.0f / (1.0f + 0.035f * math.max(0f, v_long));
                     float yawDamping = yaw_rate * 0.18f;
                     float desiredFutureSteer = math.clamp(((signedAngleErr / steerAngleLimit) * speedSteerScale) - yawDamping, -1f, 1f);
-                    float nextSteer = math.clamp(desiredFutureSteer, currentStepSteer - 0.12f, currentStepSteer + 0.12f);
-                    
-                    sequenceCost += math.abs(nextSteer - currentStepSteer) * (steerSmoothnessPenalty * 0.25f);
-                    currentStepSteer = nextSteer;
+                    currentStepSteer = math.clamp(desiredFutureSteer, currentStepSteer - 0.12f, currentStepSteer + 0.12f);
                 }
             }
 
